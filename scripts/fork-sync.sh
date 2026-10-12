@@ -39,7 +39,13 @@ install_latest() {
   dmg="$(ls -t "$REPO"/release/*-arm64.dmg 2>/dev/null | head -1)"
   [ -n "$dmg" ] || fail "no built DMG in release/"
   if pgrep -f "$APP_PATH/Contents/MacOS/" >/dev/null; then
-    notify "Update built. Quit $APP_NAME, then run scripts/fork-sync.sh --install."
+    # Run from the app's own terminal, so wait in a new session that outlives
+    # the app, then install and reopen it once the user quits.
+    python3 -c 'import subprocess, sys; subprocess.Popen(sys.argv[1:], start_new_session=True,
+      stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)' \
+      /bin/bash -c 'while pgrep -f "$0/Contents/MacOS/" >/dev/null; do sleep 2; done
+        "$1" --install && open "$0"' "$APP_PATH" "$REPO/scripts/fork-sync.sh"
+    notify "Update built. Quit $APP_NAME (Cmd-Q); it installs and reopens on its own."
     return 0
   fi
   mount="$(hdiutil attach -nobrowse -readonly "$dmg" | awk -F'\t' '/\/Volumes\//{print $NF}' | tail -1)"
