@@ -60,6 +60,7 @@ import {
   resolveResourceMonitorRustTargets,
   resolveWindowsServerAsarIgnoreGlobs,
   resourceMonitorExecutableName,
+  resolveDesktopForkIdentity,
   resolveGitHubPublishConfig,
   resolveMockUpdateServerPort,
   resolveMockUpdateServerUrl,
@@ -295,6 +296,37 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     assert.equal(resolveDesktopWebAssetBrand("0.0.17"), "production");
     assert.equal(resolveDesktopWebAssetBrand("0.0.17-nightly.20260413.42"), "nightly");
   });
+
+  it.effect("derives a fork build's home and profile from its app id", () =>
+    Effect.gen(function* () {
+      const withEnv = (env: Record<string, string>) =>
+        resolveDesktopForkIdentity.pipe(
+          Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env }))),
+        );
+
+      assert.deepStrictEqual(yield* withEnv({}), Option.none());
+      assert.deepStrictEqual(
+        yield* withEnv({ T3CODE_DESKTOP_FORK_NAME: "T3 Code Fork" }),
+        Option.none(),
+      );
+      assert.deepStrictEqual(
+        yield* withEnv({
+          T3CODE_DESKTOP_FORK_NAME: "T3 Code Fork",
+          T3CODE_DESKTOP_FORK_APP_ID: "com.example.t3code-fork",
+        }),
+        Option.some({
+          appId: "com.example.t3code-fork",
+          productName: "T3 Code Fork",
+          runtime: { home: ".t3code-fork", userDataName: "t3code-fork" },
+        }),
+      );
+      const reusedOfficialId = yield* withEnv({
+        T3CODE_DESKTOP_FORK_NAME: "T3 Code Fork",
+        T3CODE_DESKTOP_FORK_APP_ID: "com.t3tools.t3code",
+      }).pipe(Effect.exit);
+      assert.isTrue(reusedOfficialId._tag === "Failure");
+    }),
+  );
 
   it.effect("resolves GitHub desktop publish config from Effect config", () =>
     Effect.gen(function* () {

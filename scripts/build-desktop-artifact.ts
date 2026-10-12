@@ -949,6 +949,8 @@ interface StagePackageJson {
   readonly buildVersion: string;
   readonly t3codeCommitHash: string;
   readonly t3codeWebAuthn?: MacWebAuthnEntitlements;
+  /** Read by apps/desktop/src/boot.ts so a fork build keeps its own state. */
+  readonly t3codeFork?: DesktopForkIdentity["runtime"];
   readonly private: true;
   readonly packageManager: string;
   readonly description: string;
@@ -2665,6 +2667,44 @@ export function resolveDesktopRuntimeDependencies(
   );
 }
 
+interface DesktopForkIdentity {
+  readonly appId: string;
+  readonly productName: string;
+  readonly runtime: {
+    /** T3 home under the user's home directory, used when T3CODE_HOME is unset. */
+    readonly home: string;
+    /** Electron profile directory name, which also scopes the single-instance lock. */
+    readonly userDataName: string;
+  };
+}
+
+/**
+ * A fork build installs beside the official app: its own bundle id, name, T3
+ * home, and Electron profile, and no t3code:// handler to compete for. Set both
+ * T3CODE_DESKTOP_FORK_NAME and T3CODE_DESKTOP_FORK_APP_ID to build one; the
+ * app id's last segment names the home (`~/.<segment>`) and profile.
+ */
+export const resolveDesktopForkIdentity = Effect.gen(function* () {
+  const env = yield* Config.all({
+    productName: Config.String("T3CODE_DESKTOP_FORK_NAME").pipe(Config.option),
+    appId: Config.String("T3CODE_DESKTOP_FORK_APP_ID").pipe(Config.option),
+  });
+  const productName = Option.getOrUndefined(env.productName)?.trim();
+  const appId = Option.getOrUndefined(env.appId)?.trim();
+  if (!productName || !appId) return Option.none<DesktopForkIdentity>();
+  const slug = appId.split(".").at(-1) ?? "";
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(slug) || appId === DESKTOP_APP_ID) {
+    return yield* Effect.die(
+      new Error(`T3CODE_DESKTOP_FORK_APP_ID must be a new reverse-DNS id, got '${appId}'.`),
+    );
+  }
+  return Option.some<DesktopForkIdentity>({
+    appId,
+    productName,
+    runtime: { home: `.${slug}`, userDataName: slug },
+  });
+});
+
 export const resolveGitHubPublishConfig = Effect.fn("resolveGitHubPublishConfig")(function* (
   updateChannel: "latest" | "nightly",
 ) {
@@ -2768,9 +2808,10 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   wslRuntimeBundled = false,
   arch?: typeof BuildArch.Type,
 ) {
+  const fork = Option.getOrUndefined(yield* resolveDesktopForkIdentity);
   const buildConfig: Record<string, unknown> = {
-    appId: DESKTOP_APP_ID,
-    productName: resolveDesktopProductName(version),
+    appId: fork?.appId ?? DESKTOP_APP_ID,
+    productName: fork?.productName ?? resolveDesktopProductName(version),
     artifactName: "T3-Code-${version}-${arch}.${ext}",
     electronLanguages: [...DESKTOP_ELECTRON_LANGUAGES],
     files: [
@@ -2837,10 +2878,14 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
         ],
       },
       protocols: [
-        {
-          name: "T3 Code",
-          schemes: ["t3code", "t3code-dev"],
-        },
+        ...(fork
+          ? []
+          : [
+              {
+                name: "T3 Code",
+                schemes: ["t3code", "t3code-dev"],
+              },
+            ]),
         // Lets people choose T3 Code as their default web browser, which opens
         // each link in a new thread's browser panel.
         {
@@ -3857,11 +3902,13 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     options.platform === "win"
       ? path.join(stageAppDir, WINDOWS_SERVER_RESOURCE_SOURCE_DIR, WINDOWS_SERVER_ASAR_RESOURCE)
       : undefined;
+  const fork = Option.getOrUndefined(yield* resolveDesktopForkIdentity);
   const stagePackageJson: StagePackageJson = {
     name: "t3code",
     version: appVersion,
     buildVersion: appVersion,
     t3codeCommitHash: commitHash,
+    ...(fork ? { t3codeFork: fork.runtime } : {}),
     // Read by apps/desktop/src/preview/Passkeys.ts; must match the signed entitlements.
     ...(macWebAuthn ? { t3codeWebAuthn: macWebAuthn } : {}),
     private: true,

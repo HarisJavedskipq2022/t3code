@@ -2,6 +2,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
 
@@ -70,4 +71,25 @@ it.effect.each(["t3code", "T3 Code (Alpha)"])(
         "existing V2 state",
       );
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+);
+
+it.effect("gives a fork build its own profile without reading the official one", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const directory = yield* fs.makeTempDirectoryScoped({ prefix: "t3-fork-profile-" });
+    yield* fs.makeDirectory(path.join(directory, "T3 Code (Alpha)"), { recursive: true });
+    yield* fs.writeFileString(path.join(directory, "T3 Code (Alpha)", "Local State"), "{}");
+
+    const resolved = yield* resolveUserDataPath({
+      appDataDirectory: directory,
+      isDevelopment: false,
+      platform: "win32",
+      userDataNameOverride: Option.some("t3code-fork"),
+    });
+
+    assert.equal(resolved, path.join(directory, "t3code-fork"));
+    assert.isFalse(yield* fs.exists(path.join(directory, "t3code-fork")));
+    assert.isFalse(yield* fs.exists(path.join(directory, "t3code-v2")));
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );
