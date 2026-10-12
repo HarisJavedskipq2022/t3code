@@ -25,6 +25,7 @@ import * as Schema from "effect/Schema";
 import * as GitWorkflowService from "../git/GitWorkflowService.ts";
 import * as ProjectService from "../project/ProjectService.ts";
 import * as ProviderAuthService from "../provider/ProviderAuthService.ts";
+import { fusionTurnInstructions } from "./Fusion.ts";
 import * as EventSink from "./EventSink.ts";
 import * as ContextHandoffService from "./ContextHandoffService.ts";
 import {
@@ -1168,7 +1169,13 @@ export const layer: Layer.Layer<
           });
           if (!(yield* isCurrentAttemptInStatus("running"))) return;
           const start = compact ? session.compactThread! : session.startTurn;
-          const context = [delivery.context, restartNote]
+          // Fusion is restated each lead turn, with the sidekick it should keep using.
+          const fusionInstructions = fusionTurnInstructions({
+            thread: projection.thread,
+            subagents: projection.subagents,
+            compact,
+          });
+          const context = [delivery.context, restartNote, fusionInstructions]
             .filter((part) => part !== "")
             .join("\n\n");
           // A note continuation has no turn to resume; its text is the prompt.

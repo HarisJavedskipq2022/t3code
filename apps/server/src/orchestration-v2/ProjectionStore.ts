@@ -735,6 +735,7 @@ export function applyToProjection(
     case "thread.pull-request-synced":
     case "thread.runtime-mode-updated":
     case "thread.interaction-mode-updated":
+    case "thread.fusion-updated":
     case "thread.model-selection-updated":
     case "thread.provider-switched":
       return {
@@ -1468,6 +1469,7 @@ export function threadShellFromProjection(
     modelSelection: projection.thread.modelSelection,
     runtimeMode: projection.thread.runtimeMode,
     interactionMode: projection.thread.interactionMode,
+    fusion: projection.thread.fusion ?? null,
     branch: projection.thread.branch,
     worktreePath: projection.thread.worktreePath,
     pullRequests: threadPullRequestsOf(projection.thread),
@@ -1736,6 +1738,7 @@ function shellFromState(input: {
     modelSelection: input.state.thread.modelSelection,
     runtimeMode: input.state.thread.runtimeMode,
     interactionMode: input.state.thread.interactionMode,
+    fusion: input.state.thread.fusion ?? null,
     branch: input.state.thread.branch,
     worktreePath: input.state.thread.worktreePath,
     pullRequests: threadPullRequestsOf(input.state.thread),
@@ -1842,6 +1845,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
           case "thread.pull-request-synced":
           case "thread.runtime-mode-updated":
           case "thread.interaction-mode-updated":
+          case "thread.fusion-updated":
           case "thread.model-selection-updated":
           case "thread.provider-switched": {
             const payloadJson = yield* encodeThreadPayload(event.payload);
@@ -2672,6 +2676,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
           event.type !== "thread.metadata-updated" &&
           event.type !== "thread.runtime-mode-updated" &&
           event.type !== "thread.interaction-mode-updated" &&
+          event.type !== "thread.fusion-updated" &&
           event.type !== "thread.model-selection-updated" &&
           event.type !== "thread.provider-switched"
         ) {

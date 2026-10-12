@@ -361,6 +361,15 @@ export const OrchestrationV2LimitRecoveryUpdate = Schema.Struct({
 );
 export type OrchestrationV2LimitRecoveryUpdate = typeof OrchestrationV2LimitRecoveryUpdate.Type;
 
+/**
+ * Fusion pairing: the thread's own model leads (plans and reviews) while this
+ * selection runs one persistent sidekick child that writes the code.
+ */
+export const OrchestrationV2ThreadFusion = Schema.Struct({
+  sidekick: ModelSelection,
+});
+export type OrchestrationV2ThreadFusion = typeof OrchestrationV2ThreadFusion.Type;
+
 export const OrchestrationV2AppThread = Schema.Struct({
   ...OrchestrationV2CreationFields,
   id: ThreadId,
@@ -370,6 +379,8 @@ export const OrchestrationV2AppThread = Schema.Struct({
   modelSelection: ModelSelection,
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode,
+  /** Optional so threads from before Fusion still decode. */
+  fusion: Schema.optional(Schema.NullOr(OrchestrationV2ThreadFusion)),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
   /** Pull request the user linked to this thread (#8160); optional so
@@ -1760,6 +1771,7 @@ export const OrchestrationV2DomainEvent = Schema.Union([
       "thread.pull-request-synced",
       "thread.runtime-mode-updated",
       "thread.interaction-mode-updated",
+      "thread.fusion-updated",
       "thread.model-selection-updated",
       "thread.provider-switched",
     ]),
@@ -1933,6 +1945,8 @@ export const OrchestrationV2ThreadShell = Schema.Struct({
   modelSelection: ModelSelection,
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode,
+  /** Optional so threads from before Fusion still decode. */
+  fusion: Schema.optional(Schema.NullOr(OrchestrationV2ThreadFusion)),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
   /** Pull request the user linked to this thread (#8160). */
@@ -2580,6 +2594,7 @@ export const OrchestrationV2DomainEventJson = Schema.Union([
       "thread.metadata-updated",
       "thread.runtime-mode-updated",
       "thread.interaction-mode-updated",
+      "thread.fusion-updated",
       "thread.model-selection-updated",
       "thread.provider-switched",
     ]),
@@ -2941,6 +2956,8 @@ export const OrchestrationV2Command = Schema.Union([
     /** Seed the temporary title and generate a durable replacement for the first message. */
     titleSeed: Schema.optional(TrimmedNonEmptyString),
     modelSelection: Schema.optional(ModelSelection),
+    /** Fusion pairing for this and later runs; null turns it off, absent keeps it. */
+    fusion: Schema.optional(Schema.NullOr(OrchestrationV2ThreadFusion)),
     sourcePlanRef: Schema.optional(Schema.Struct({ threadId: ThreadId, planId: PlanId })),
     restartContinuationOfRunId: Schema.optional(RunId),
     usageLimitContinuationOfRunId: Schema.optional(RunId),
@@ -3291,6 +3308,7 @@ export const OrchestrationV2ThreadLaunchInput = Schema.Struct({
   modelSelection: ModelSelection,
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode,
+  fusion: Schema.optional(Schema.NullOr(OrchestrationV2ThreadFusion)),
   workspaceStrategy: OrchestrationV2ThreadLaunchWorkspaceStrategy,
   initialMessage: Schema.optional(
     Schema.Struct({

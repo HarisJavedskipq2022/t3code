@@ -10,6 +10,7 @@ import {
   type ChatAttachment,
   type MessageId,
   type ModelSelection,
+  type OrchestrationV2ThreadFusion,
   type NodeId,
   type OrchestrationV2Command,
   type OrchestrationV2CreationSource,
@@ -176,6 +177,8 @@ export interface StartThreadTurnInput extends ThreadCommandInput {
     readonly context?: import("@t3tools/contracts").OrchestrationMessageContext;
   };
   readonly modelSelection?: ModelSelection;
+  /** Fusion pairing to apply with this message; null turns it off, absent keeps it. */
+  readonly fusion?: OrchestrationV2ThreadFusion | null;
   readonly titleSeed?: string;
   readonly runtimeMode: RuntimeMode;
   readonly interactionMode: ProviderInteractionMode;
@@ -681,6 +684,7 @@ export const startThreadTurn = Effect.fn("EnvironmentCommands.startThreadTurn")(
       modelSelection: input.modelSelection ?? thread.modelSelection,
       runtimeMode: input.runtimeMode,
       interactionMode: input.interactionMode,
+      ...(input.fusion === undefined ? {} : { fusion: input.fusion }),
       workspaceStrategy,
       initialMessage: {
         messageId: input.message.messageId,
@@ -707,6 +711,7 @@ export const startThreadTurn = Effect.fn("EnvironmentCommands.startThreadTurn")(
       ...(context ? { context } : {}),
       attachments,
       ...(input.modelSelection === undefined ? {} : { modelSelection: input.modelSelection }),
+      ...(input.fusion === undefined ? {} : { fusion: input.fusion }),
       ...(input.sourceProposedPlan === undefined
         ? {}
         : { sourcePlanRef: input.sourceProposedPlan }),
@@ -769,6 +774,7 @@ export const startThreadTurn = Effect.fn("EnvironmentCommands.startThreadTurn")(
     attachments,
     ...(shouldSendTitleSeed ? { titleSeed: input.titleSeed } : {}),
     ...(input.modelSelection === undefined ? {} : { modelSelection: input.modelSelection }),
+    ...(input.fusion === undefined ? {} : { fusion: input.fusion }),
     ...(input.sourceProposedPlan === undefined ? {} : { sourcePlanRef: input.sourceProposedPlan }),
     ...(serverResolvesCommandContext && requestedMode !== "queue"
       ? { deliveryIntent: requestedMode }

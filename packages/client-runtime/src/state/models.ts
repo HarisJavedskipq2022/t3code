@@ -97,6 +97,8 @@ export interface EnvironmentThreadShell {
   readonly modelSelection: OrchestrationV2ThreadShell["modelSelection"];
   readonly runtimeMode: OrchestrationV2ThreadShell["runtimeMode"];
   readonly interactionMode: OrchestrationV2ThreadShell["interactionMode"];
+  /** Fusion pairing; null when off or on servers from before Fusion. */
+  readonly fusion: NonNullable<OrchestrationV2ThreadShell["fusion"]> | null;
   readonly branch: string | null;
   readonly worktreePath: string | null;
   readonly lineage: OrchestrationV2ThreadShell["lineage"];
@@ -240,6 +242,7 @@ export function presentThreadShell(
     modelSelection: thread.modelSelection,
     runtimeMode: thread.runtimeMode,
     interactionMode: thread.interactionMode,
+    fusion: thread.fusion ?? null,
     branch: thread.branch,
     worktreePath: thread.worktreePath,
     pullRequests: threadPullRequestsOf(thread),
