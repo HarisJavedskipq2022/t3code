@@ -47,10 +47,11 @@ const INLINE_AGENT_ICON_PATTERN = /^data:image\/(?:png|webp|svg\+xml);base64,[A-
 
 /**
  * A local agent's own icon, embedded as a base64 image data URI so clients
- * never fetch an arbitrary origin. Capped at the provider snapshot's icon size.
+ * never fetch an arbitrary origin. Capped at the provider snapshot's icon size,
+ * which leaves room for a small vector logo.
  */
 export function resolveInlineAgentIcon(icon: string | null | undefined): string | null {
-  return icon && icon.length <= 2_048 && INLINE_AGENT_ICON_PATTERN.test(icon) ? icon : null;
+  return icon && icon.length <= 8_192 && INLINE_AGENT_ICON_PATTERN.test(icon) ? icon : null;
 }
 
 export const AcpRegistryDistribution = Schema.Literals(["binary", "npx", "uvx"]);

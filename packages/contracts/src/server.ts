@@ -254,7 +254,8 @@ export const ServerProvider = Schema.Struct({
   accentColor: Schema.optional(TrimmedNonEmptyString),
   // Optional visual identity supplied by the owning provider driver. Clients
   // must still validate remote URLs against that driver's trusted origin.
-  iconUrl: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(2_048))),
+  // Room for a local agent's inline SVG icon; see resolveInlineAgentIcon.
+  iconUrl: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(8_192))),
   badgeLabel: Schema.optional(TrimmedNonEmptyString),
   continuation: Schema.optional(ServerProviderContinuation),
   showInteractionModeToggle: Schema.optional(Schema.Boolean),

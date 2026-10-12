@@ -54,7 +54,7 @@ describe("ACP Registry contracts", () => {
     expect(resolveInlineAgentIcon("https://example.com/icon.png")).toBeNull();
     expect(resolveInlineAgentIcon("data:text/html;base64,PHNjcmlwdD4=")).toBeNull();
     expect(resolveInlineAgentIcon("data:image/svg+xml,<svg onload=alert(1)>")).toBeNull();
-    expect(resolveInlineAgentIcon(`data:image/png;base64,${"A".repeat(2_048)}`)).toBeNull();
+    expect(resolveInlineAgentIcon(`data:image/png;base64,${"A".repeat(8_192)}`)).toBeNull();
     expect(resolveInlineAgentIcon("")).toBeNull();
   });
 
