@@ -1,5 +1,6 @@
 import { useEffect, useId, useState } from "react";
 import {
+  resolveInlineAgentIcon,
   resolveOfficialAcpRegistryIconUrl,
   officialAcpRegistryIconUrlForAgentId,
 } from "@t3tools/contracts";
@@ -11,7 +12,11 @@ const ACP_REGISTRY_ICON_CACHE = "t3-acp-registry-icons-v1";
 const MAX_ICON_BYTES = 512 * 1_024;
 const inFlightIcons = new Map<string, Promise<Blob>>();
 
-export { officialAcpRegistryIconUrlForAgentId, resolveOfficialAcpRegistryIconUrl };
+export {
+  officialAcpRegistryIconUrlForAgentId,
+  resolveInlineAgentIcon,
+  resolveOfficialAcpRegistryIconUrl,
+};
 
 async function checkedIconBlob(response: Response): Promise<Blob> {
   if (!response.ok || response.redirected) throw new Error("ACP registry icon request failed.");
@@ -80,7 +85,8 @@ export function AcpRegistryAgentIcon({
   readonly fallbackClassName?: string;
 }) {
   const colorFilterId = useId();
-  const iconUrl = resolveOfficialAcpRegistryIconUrl(icon);
+  const inlineIcon = resolveInlineAgentIcon(icon);
+  const iconUrl = inlineIcon === null ? resolveOfficialAcpRegistryIconUrl(icon) : null;
   const [image, setImage] = useState<{
     readonly iconUrl: string;
     readonly source: string;
@@ -116,14 +122,21 @@ export function AcpRegistryAgentIcon({
     };
   }, [iconUrl]);
 
+  const containerClassName = cn(
+    "relative flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted text-muted-foreground",
+    className,
+  );
+  // A local agent's own icon is a full-color brand mark, so it skips the monochrome recolor.
+  if (inlineIcon !== null) {
+    return (
+      <span aria-hidden className={containerClassName}>
+        <img alt="" className="size-full object-contain" decoding="async" src={inlineIcon} />
+      </span>
+    );
+  }
+
   return (
-    <span
-      aria-hidden
-      className={cn(
-        "relative flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted text-muted-foreground",
-        className,
-      )}
-    >
+    <span aria-hidden className={containerClassName}>
       {/* Registry glyphs are monochrome. Recolor their alpha rather than
           inverting RGB values; external images cannot inherit currentColor.
           A local SVG filter also works when CDN CORS prevents CSS masks. */}

@@ -43,6 +43,16 @@ export function resolveOfficialAcpRegistryIconUrl(icon: string | null | undefine
   }
 }
 
+const INLINE_AGENT_ICON_PATTERN = /^data:image\/(?:png|webp|svg\+xml);base64,[A-Za-z0-9+/]+={0,2}$/;
+
+/**
+ * A local agent's own icon, embedded as a base64 image data URI so clients
+ * never fetch an arbitrary origin. Capped at the provider snapshot's icon size.
+ */
+export function resolveInlineAgentIcon(icon: string | null | undefined): string | null {
+  return icon && icon.length <= 2_048 && INLINE_AGENT_ICON_PATTERN.test(icon) ? icon : null;
+}
+
 export const AcpRegistryDistribution = Schema.Literals(["binary", "npx", "uvx"]);
 export type AcpRegistryDistribution = typeof AcpRegistryDistribution.Type;
 

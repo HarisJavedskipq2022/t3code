@@ -3,7 +3,7 @@ import { Path, Svg } from "react-native-svg";
 import { View } from "react-native";
 import { providerInstanceInitials } from "@t3tools/client-runtime/state/provider-instance-display";
 import { useState } from "react";
-import { resolveOfficialAcpRegistryIconUrl } from "@t3tools/contracts";
+import { resolveInlineAgentIcon, resolveOfficialAcpRegistryIconUrl } from "@t3tools/contracts";
 import { useAppearancePreferences } from "../features/settings/appearance/AppearancePreferencesProvider";
 import { AppText as Text } from "./AppText";
 import { getProviderClient } from "../lib/providerClients";
@@ -30,7 +30,8 @@ function AcpRegistryProviderIcon(props: {
   readonly iconUrl: string | null | undefined;
   readonly size: number;
 }) {
-  const iconUrl = resolveOfficialAcpRegistryIconUrl(props.iconUrl);
+  const inlineIcon = resolveInlineAgentIcon(props.iconUrl);
+  const iconUrl = inlineIcon ?? resolveOfficialAcpRegistryIconUrl(props.iconUrl);
   const [image, setImage] = useState<{
     readonly iconUrl: string;
     readonly status: "loaded" | "failed";
@@ -53,7 +54,8 @@ function AcpRegistryProviderIcon(props: {
             width: props.size,
             height: props.size,
             opacity: loaded ? 1 : 0,
-            tintColor: props.color,
+            // A local agent's inline icon is a full-color brand mark.
+            ...(inlineIcon === null ? { tintColor: props.color } : {}),
           }}
           onError={() => setImage({ iconUrl, status: "failed" })}
           onLoad={() => setImage({ iconUrl, status: "loaded" })}

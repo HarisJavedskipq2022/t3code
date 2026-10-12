@@ -11,6 +11,7 @@ import {
   AcpRegistrySearchAgent,
   AcpRegistrySearchInput,
   officialAcpRegistryIconUrlForAgentId,
+  resolveInlineAgentIcon,
   resolveOfficialAcpRegistryIconUrl,
 } from "./acpRegistry.ts";
 
@@ -44,6 +45,17 @@ describe("ACP Registry contracts", () => {
         "https://user@cdn.agentclientprotocol.com/registry/v1/latest/pi-acp.svg",
       ),
     ).toBeNull();
+  });
+
+  it("accepts only bounded base64 image data URIs as inline agent icons", () => {
+    const png = "data:image/png;base64,iVBORw0KGgo=";
+    expect(resolveInlineAgentIcon(png)).toBe(png);
+    expect(resolveInlineAgentIcon("data:image/svg+xml;base64,PHN2Zz4=")).not.toBeNull();
+    expect(resolveInlineAgentIcon("https://example.com/icon.png")).toBeNull();
+    expect(resolveInlineAgentIcon("data:text/html;base64,PHNjcmlwdD4=")).toBeNull();
+    expect(resolveInlineAgentIcon("data:image/svg+xml,<svg onload=alert(1)>")).toBeNull();
+    expect(resolveInlineAgentIcon(`data:image/png;base64,${"A".repeat(2_048)}`)).toBeNull();
+    expect(resolveInlineAgentIcon("")).toBeNull();
   });
 
   it("decodes bounded search and prepare payloads", () => {

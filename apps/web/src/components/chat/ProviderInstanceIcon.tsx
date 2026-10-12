@@ -11,6 +11,7 @@ import { ProviderPackageIcon } from "./ProviderPackageIcon";
 import {
   AcpRegistryAgentIcon,
   officialAcpRegistryIconUrlForAgentId,
+  resolveInlineAgentIcon,
   resolveOfficialAcpRegistryIconUrl,
 } from "../settings/AcpRegistryIcon";
 
@@ -50,6 +51,7 @@ export function resolveProviderInstanceAcpRegistryIconUrl(input: {
   if (input.driverKind !== "acpRegistry") return null;
   return (
     resolveOfficialAcpRegistryIconUrl(input.iconUrl ?? null) ??
+    resolveInlineAgentIcon(input.iconUrl) ??
     officialAcpRegistryIconUrlForAgentId(input.agentId?.trim() || null)
   );
 }

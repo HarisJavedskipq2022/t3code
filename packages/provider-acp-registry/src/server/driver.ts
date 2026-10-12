@@ -1,6 +1,7 @@
 import {
   officialAcpRegistryIconUrlForAgentId,
   ProviderDriverKind,
+  resolveInlineAgentIcon,
   resolveOfficialAcpRegistryIconUrl,
   TextGenerationError,
   type AcpRegistryOperationError,
@@ -201,7 +202,7 @@ function baseSnapshot(
 ): ServerProvider {
   const iconUrl =
     input.settings.source === "local"
-      ? null
+      ? resolveInlineAgentIcon(input.settings.icon)
       : (resolveOfficialAcpRegistryIconUrl(input.probe?.probe.icon) ??
         officialAcpRegistryIconUrlForAgentId(input.settings.agentId));
   return {
