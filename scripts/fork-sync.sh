@@ -94,7 +94,9 @@ if [ ! -x "$MONITOR" ]; then
   mkdir -p "$(dirname "$MONITOR")"
   cp "$source_monitor" "$MONITOR"
 fi
-T3CODE_DESKTOP_REUSE_RESOURCE_MONITOR=true vp run dist:desktop:fork || stop "desktop build failed"
+# Stamp the nightly's version, as upstream's release workflow does, so About shows the base.
+T3CODE_DESKTOP_VERSION="${TAG#v}" T3CODE_DESKTOP_REUSE_RESOURCE_MONITOR=true vp run dist:desktop:fork \
+  || stop "desktop build failed"
 
 if [ "$CANDIDATE" != fork ]; then
   git switch --quiet fork
