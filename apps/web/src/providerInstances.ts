@@ -15,6 +15,7 @@
 import {
   DEFAULT_MODEL_BY_PROVIDER,
   defaultInstanceIdForDriver,
+  resolveInlineAgentIcon,
   resolveProjectProviderInstanceEnabled,
   type ModelSelection,
   type ProjectId,
@@ -212,7 +213,14 @@ export function applyProviderInstanceSettings(
         ? (explicitInstance.config as Readonly<Record<string, unknown>>)
         : null;
     if (config?.source === "local") {
-      return { ...entry, enabled, acpRegistryAgentId: undefined, acpRegistryIconUrl: undefined };
+      // A local command has no registry identity; only its own inline icon applies.
+      const icon = resolveInlineAgentIcon(typeof config.icon === "string" ? config.icon : null);
+      return {
+        ...entry,
+        enabled,
+        acpRegistryAgentId: undefined,
+        acpRegistryIconUrl: icon ?? undefined,
+      };
     }
     const agentId = config?.agentId;
     const iconUrl = config?.registryIconUrl;

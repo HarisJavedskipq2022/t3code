@@ -694,6 +694,31 @@ describe("provider icon metadata", () => {
     expect(restoredEntry?.enabled).toBe(true);
   });
 
+  it("shows a local command's own inline icon but never a registry URL", () => {
+    const instanceId = ProviderInstanceId.make("command-code");
+    const driver = ProviderDriverKind.make("acpRegistry");
+    const icon = "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=";
+    const entries = deriveProviderInstanceEntries([provider({ provider: driver, instanceId })]);
+    const settingsWith = (config: Record<string, unknown>) => ({
+      providerInstances: { [instanceId]: { driver, enabled: true, config } },
+      projectSettingsOverrides: {},
+    });
+
+    const [withIcon] = applyProviderInstanceSettings(
+      entries,
+      settingsWith({ source: "local", commandPath: "cmd", icon }),
+      null,
+    );
+    expect(withIcon?.acpRegistryIconUrl).toBe(icon);
+
+    const [withRemoteIcon] = applyProviderInstanceSettings(
+      entries,
+      settingsWith({ source: "local", commandPath: "cmd", icon: "https://example.com/i.svg" }),
+      null,
+    );
+    expect(withRemoteIcon?.acpRegistryIconUrl).toBeUndefined();
+  });
+
   it("retains server-published registry icons without local settings", () => {
     const iconUrl = "https://cdn.agentclientprotocol.com/registry/icons/swe-agent.svg";
     const [entry] = deriveProviderInstanceEntries([
