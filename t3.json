@@ -7,6 +7,11 @@
       "command": "node scripts/setup-worktree.ts",
       "icon": "configure",
       "runOnWorktreeCreate": true
+    },
+    {
+      "name": "Sync with nightly",
+      "command": "\"$T3CODE_PROJECT_ROOT/scripts/fork-sync.sh\"",
+      "icon": "build"
     }
   ]
 }
