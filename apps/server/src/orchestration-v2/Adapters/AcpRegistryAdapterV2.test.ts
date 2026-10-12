@@ -135,6 +135,7 @@ describe("AcpRegistryAdapterV2", () => {
       enabled: true,
       agentId: "",
       commandPath: "",
+      icon: "",
       authMethodId: "",
       distribution: "auto",
       customModels: [],
