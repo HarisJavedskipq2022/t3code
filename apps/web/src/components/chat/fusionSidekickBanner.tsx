@@ -23,6 +23,7 @@ const TITLES = {
 
 /** The composer banner for a Fusion lead's sidekick, or null while there is nothing to say. */
 export function useFusionSidekickBanner(input: {
+  /** Null until the thread exists on the server; see resolveThreadDetailRef. */
   threadRef: ScopedThreadRef | null;
   leadWorking: boolean;
   leadActivityStartedAt: string | null;

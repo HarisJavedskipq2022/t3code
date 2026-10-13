@@ -7453,7 +7453,8 @@ export default function ChatView(props: ChatViewProps) {
     [environmentId, navigate],
   );
   const fusionSidekickBannerItem = useFusionSidekickBanner({
-    threadRef: activeThreadRef,
+    // The guarded ref: subscribing to a draft before its thread exists caches "not found".
+    threadRef: routeThreadDetailRef,
     leadWorking: isWorking,
     leadActivityStartedAt: activeThreadShell?.runtime?.activityStartedAt ?? null,
     onOpenThread: onOpenRelatedThread,
