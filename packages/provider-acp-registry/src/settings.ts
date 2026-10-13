@@ -56,7 +56,7 @@ export const AcpRegistrySettings = makeProviderSettingsSchema(
       Schema.annotateKey({
         title: "Icon",
         description:
-          "Optional icon for a local command, as a base64 PNG, WebP, or SVG data URI of at most 8,192 characters.",
+          "Optional icon for a local command: a single-color base64 PNG, WebP, or SVG data URI of at most 8,192 characters, tinted to match the theme.",
         providerSettingsForm: { placeholder: "data:image/png;base64,…", clearWhenEmpty: "omit" },
       }),
     ),

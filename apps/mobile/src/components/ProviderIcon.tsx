@@ -30,8 +30,8 @@ function AcpRegistryProviderIcon(props: {
   readonly iconUrl: string | null | undefined;
   readonly size: number;
 }) {
-  const inlineIcon = resolveInlineAgentIcon(props.iconUrl);
-  const iconUrl = inlineIcon ?? resolveOfficialAcpRegistryIconUrl(props.iconUrl);
+  const iconUrl =
+    resolveInlineAgentIcon(props.iconUrl) ?? resolveOfficialAcpRegistryIconUrl(props.iconUrl);
   const [image, setImage] = useState<{
     readonly iconUrl: string;
     readonly status: "loaded" | "failed";
@@ -54,8 +54,7 @@ function AcpRegistryProviderIcon(props: {
             width: props.size,
             height: props.size,
             opacity: loaded ? 1 : 0,
-            // A local agent's inline icon is a full-color brand mark.
-            ...(inlineIcon === null ? { tintColor: props.color } : {}),
+            tintColor: props.color,
           }}
           onError={() => setImage({ iconUrl, status: "failed" })}
           onLoad={() => setImage({ iconUrl, status: "loaded" })}

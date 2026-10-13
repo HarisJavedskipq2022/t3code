@@ -97,8 +97,9 @@ export function AcpRegistryAgentIcon({
   // fetch succeeds, or the raw allowlisted CDN URL when it fails (the official
   // CDN serves no CORS headers, so the validating fetch is often blocked in
   // cross-origin browser contexts while native <img> loading still works).
-  const source = currentImage?.source ?? null;
-  const status = currentImage?.status ?? "loading";
+  // A local agent's inline icon needs no fetch and is tinted the same way.
+  const source = inlineIcon ?? currentImage?.source ?? null;
+  const status = inlineIcon === null ? (currentImage?.status ?? "loading") : "loaded";
 
   useEffect(() => {
     if (iconUrl === null) return;
@@ -122,21 +123,14 @@ export function AcpRegistryAgentIcon({
     };
   }, [iconUrl]);
 
-  const containerClassName = cn(
-    "relative flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted text-muted-foreground",
-    className,
-  );
-  // A local agent's own icon is a full-color brand mark, so it skips the monochrome recolor.
-  if (inlineIcon !== null) {
-    return (
-      <span aria-hidden className={containerClassName}>
-        <img alt="" className="size-full object-contain" decoding="async" src={inlineIcon} />
-      </span>
-    );
-  }
-
   return (
-    <span aria-hidden className={containerClassName}>
+    <span
+      aria-hidden
+      className={cn(
+        "relative flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted text-muted-foreground",
+        className,
+      )}
+    >
       {/* Registry glyphs are monochrome. Recolor their alpha rather than
           inverting RGB values; external images cannot inherit currentColor.
           A local SVG filter also works when CDN CORS prevents CSS masks. */}
