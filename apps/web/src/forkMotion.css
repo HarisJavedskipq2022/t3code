@@ -1,0 +1,19 @@
+/* Fork: the sidebar's Working icon turns so an in-progress thread reads as live.
+   Twelve 30° steps over 4s update about three times a second instead of every
+   frame (upstream keeps this icon still to avoid per-frame repaints). The
+   dashed circle has 8 dashes, so 45° steps would look frozen. */
+@keyframes fork-working-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.fork-working-spin {
+  animation: fork-working-spin 4s steps(12) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fork-working-spin {
+    animation: none;
+  }
+}
