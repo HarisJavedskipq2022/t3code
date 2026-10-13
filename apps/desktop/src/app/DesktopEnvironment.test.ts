@@ -181,6 +181,20 @@ describe("DesktopEnvironment", () => {
     }),
   );
 
+  it.effect("names a fork build after its own app name", () =>
+    Effect.gen(function* () {
+      const fork = yield* makeEnvironment(
+        { isPackaged: true, appVersion: "0.0.22-nightly.20261013.1" },
+        { T3CODE_DESKTOP_APP_NAME: " HCode " },
+      );
+      const official = yield* makeEnvironment({ isPackaged: true });
+
+      assert.equal(fork.branding.baseName, "HCode");
+      assert.equal(fork.displayName, "HCode (Nightly)");
+      assert.equal(official.displayName, "T3 Code (Alpha)");
+    }),
+  );
+
   it.effect("resolves picker defaults without nullish sentinels", () =>
     Effect.gen(function* () {
       const environment = yield* makeEnvironment();

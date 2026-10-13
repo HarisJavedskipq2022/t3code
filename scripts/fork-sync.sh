@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Brings the `fork` branch up to the newest upstream T3 Code nightly tag,
-# checks the fork patches, rebuilds T3 Code Fork, and installs it.
+# checks the fork patches, rebuilds HCode, and installs it.
 #
 #   scripts/fork-sync.sh            sync to the newest nightly, build, install
 #   scripts/fork-sync.sh --force    rebuild even when already on the newest nightly
@@ -9,12 +9,14 @@
 # The nightly is merged on a fork-sync/<tag> branch first; `fork` only
 # fast-forwards to it after the tests and build pass, so a failure leaves
 # `fork` untouched and the candidate branch kept for inspection. Installing
-# waits for T3 Code Fork to be closed so running agents are not interrupted.
+# waits for HCode to be closed so running agents are not interrupted.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP_NAME="T3 Code Fork"
+APP_NAME="HCode"
 APP_PATH="/Applications/$APP_NAME.app"
+# The app's name before the rename; the next install replaces it.
+OLD_APP_PATH="/Applications/T3 Code Fork.app"
 LOG="$HOME/.t3code-fork/sync.log"
 WAITER_PID="$HOME/.t3code-fork/install-waiter.pid"
 MONITOR="native/resource-monitor/target/aarch64-apple-darwin/release/t3-resource-monitor"
@@ -54,21 +56,24 @@ install_latest() {
   dmg="$(ls -t "$REPO"/release/*-arm64.dmg 2>/dev/null | head -1)"
   [ -n "$dmg" ] || fail "no built DMG in release/"
   cancel_pending_install
-  if pgrep -f "$APP_PATH/Contents/MacOS/" >/dev/null; then
+  if pgrep -f "$APP_PATH/Contents/MacOS/|$OLD_APP_PATH/Contents/MacOS/" >/dev/null; then
     # Run from the app's own terminal, so wait in a new session that outlives
     # the app, then install and reopen it once the user quits.
     python3 -c 'import subprocess, sys; print(subprocess.Popen(sys.argv[1:], start_new_session=True,
       stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).pid)' \
-      /bin/bash -c 'while pgrep -f "$0/Contents/MacOS/" >/dev/null; do sleep 2; done
-        "$1" --install && sleep 2 && open "$0"' "$APP_PATH" "$REPO/scripts/fork-sync.sh" \
+      /bin/bash -c 'while pgrep -f "$0/Contents/MacOS/|$2/Contents/MacOS/" >/dev/null; do sleep 2; done
+        "$1" --install && sleep 2 && open "$0"' "$APP_PATH" "$REPO/scripts/fork-sync.sh" "$OLD_APP_PATH" \
       >"$WAITER_PID"
     notify "Update built. Quit $APP_NAME (Cmd-Q); it installs and reopens on its own."
     return 0
   fi
   mount="$(hdiutil attach -nobrowse -readonly "$dmg" | awk -F'\t' '/\/Volumes\//{print $NF}' | tail -1)"
-  if [ -d "$APP_PATH" ]; then
-    mv "$APP_PATH" "$HOME/.Trash/$APP_NAME $(date +%Y%m%d-%H%M%S).app"
-  fi
+  local old
+  for old in "$APP_PATH" "$OLD_APP_PATH"; do
+    if [ -d "$old" ]; then
+      mv "$old" "$HOME/.Trash/$(basename "$old" .app) $(date +%Y%m%d-%H%M%S).app"
+    fi
+  done
   ditto "$mount/$APP_NAME.app" "$APP_PATH"
   hdiutil detach "$mount" -quiet
   notify "Installed $(basename "$dmg" .dmg)."

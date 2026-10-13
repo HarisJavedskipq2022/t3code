@@ -111,12 +111,15 @@ function resolveDesktopAppStageLabel(input: {
 export function resolveDesktopAppBranding(input: {
   readonly isDevelopment: boolean;
   readonly appVersion: string;
+  /** A fork build's own name; see apps/desktop/src/boot.ts. */
+  readonly baseName?: string | undefined;
 }): DesktopAppBranding {
   const stageLabel = resolveDesktopAppStageLabel(input);
+  const baseName = input.baseName ?? APP_BASE_NAME;
   return {
-    baseName: APP_BASE_NAME,
+    baseName,
     stageLabel,
-    displayName: `${APP_BASE_NAME} (${stageLabel})`,
+    displayName: `${baseName} (${stageLabel})`,
   };
 }
 
@@ -180,6 +183,7 @@ const make = Effect.fn("desktop.environment.make")(function* (
   const branding = resolveDesktopAppBranding({
     isDevelopment,
     appVersion: input.appVersion,
+    baseName: Option.getOrUndefined(config.appNameOverride),
   });
   const displayName = branding.displayName;
   const stateDir = resolveDesktopStateDir({

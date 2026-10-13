@@ -2675,6 +2675,8 @@ interface DesktopForkIdentity {
     readonly home: string;
     /** Electron profile directory name, which also scopes the single-instance lock. */
     readonly userDataName: string;
+    /** Shown in the menu bar, About panel and window titles instead of "T3 Code". */
+    readonly name: string;
   };
 }
 
@@ -2701,7 +2703,7 @@ export const resolveDesktopForkIdentity = Effect.gen(function* () {
   return Option.some<DesktopForkIdentity>({
     appId,
     productName,
-    runtime: { home: `.${slug}`, userDataName: slug },
+    runtime: { home: `.${slug}`, userDataName: slug, name: productName },
   });
 });
 

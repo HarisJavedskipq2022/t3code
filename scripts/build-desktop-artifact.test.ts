@@ -317,7 +317,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
         Option.some({
           appId: "com.example.t3code-fork",
           productName: "T3 Code Fork",
-          runtime: { home: ".t3code-fork", userDataName: "t3code-fork" },
+          runtime: { home: ".t3code-fork", userDataName: "t3code-fork", name: "T3 Code Fork" },
         }),
       );
       const reusedOfficialId = yield* withEnv({
