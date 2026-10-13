@@ -75,6 +75,10 @@ describe("fusionTurnInstructions", () => {
     );
     expect(text).toContain("No sidekick exists yet");
     expect(text).toContain("overrides the general advice to call delegate_task again");
+    // Lessons from a stalled sidekick: small steps, and test runs that cannot hang unseen.
+    expect(text).toContain("Keep the hard parts yourself");
+    expect(text).toContain("never pipe test output through tail or head");
+    expect(text).toContain("Don't widen a step while it runs");
   });
 
   it("points a returning lead at its existing sidekick", () => {
