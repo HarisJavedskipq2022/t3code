@@ -1,0 +1,111 @@
+import { ProviderInstanceId, RunId, ThreadId } from "@t3tools/contracts";
+import { describe, expect, it } from "vite-plus/test";
+
+import { resolveFusionSidekickActivity } from "./fusionSidekickBanner.logic";
+
+const sidekick = { childThreadId: ThreadId.make("thread-sidekick"), status: "idle" } as const;
+const leadActivityStartedAt = "2026-10-13T10:00:00.000Z";
+
+function child(
+  status: "running" | "completed" | "failed" | "idle",
+  updatedAt = "2026-10-13T10:05:00.000Z",
+) {
+  return {
+    title: "Add FizzBuzz",
+    hasPendingApprovals: false,
+    hasPendingUserInput: false,
+    runtime: {
+      status,
+      activeRunId: status === "running" ? RunId.make("run-sidekick") : null,
+      providerInstanceId: ProviderInstanceId.make("codex"),
+      providerName: null,
+      lastError: status === "failed" ? "Usage limit reached" : null,
+      updatedAt,
+    },
+  };
+}
+
+describe("resolveFusionSidekickActivity", () => {
+  it("shows a working sidekick whether or not the lead is busy", () => {
+    for (const leadWorking of [true, false]) {
+      expect(
+        resolveFusionSidekickActivity({
+          sidekick,
+          child: child("running"),
+          leadWorking,
+          leadActivityStartedAt: leadWorking ? leadActivityStartedAt : null,
+        }),
+      ).toMatchObject({ kind: "working", childThreadId: "thread-sidekick", title: "Add FizzBuzz" });
+    }
+  });
+
+  it("says the lead is reviewing once the sidekick settles during the lead's turn", () => {
+    expect(
+      resolveFusionSidekickActivity({
+        sidekick,
+        child: child("completed"),
+        leadWorking: true,
+        leadActivityStartedAt,
+      }),
+    ).toMatchObject({ kind: "finished" });
+  });
+
+  it("reports a sidekick that failed during the lead's turn, with the reason", () => {
+    expect(
+      resolveFusionSidekickActivity({
+        sidekick: { ...sidekick, status: "failed" },
+        child: child("failed"),
+        leadWorking: true,
+        leadActivityStartedAt,
+      }),
+    ).toMatchObject({ kind: "stopped", reason: "Usage limit reached" });
+  });
+
+  it("stays hidden for settled work the lead is not reviewing", () => {
+    // The lead finished too.
+    expect(
+      resolveFusionSidekickActivity({
+        sidekick,
+        child: child("completed"),
+        leadWorking: false,
+        leadActivityStartedAt: null,
+      }),
+    ).toBeNull();
+    // The sidekick settled before this lead turn began.
+    expect(
+      resolveFusionSidekickActivity({
+        sidekick,
+        child: child("completed", "2026-10-13T09:00:00.000Z"),
+        leadWorking: true,
+        leadActivityStartedAt,
+      }),
+    ).toBeNull();
+  });
+
+  it("leaves input requests and missing threads to other surfaces", () => {
+    expect(
+      resolveFusionSidekickActivity({
+        sidekick,
+        child: { ...child("running"), hasPendingUserInput: true },
+        leadWorking: true,
+        leadActivityStartedAt,
+      }),
+    ).toBeNull();
+    expect(
+      resolveFusionSidekickActivity({
+        sidekick: null,
+        child: child("running"),
+        leadWorking: true,
+        leadActivityStartedAt,
+      }),
+    ).toBeNull();
+    expect(
+      resolveFusionSidekickActivity({
+        sidekick,
+        child: null,
+        leadWorking: true,
+        leadActivityStartedAt,
+      }),
+    ).toBeNull();
+  });
+});

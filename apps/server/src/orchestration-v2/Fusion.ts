@@ -4,6 +4,7 @@ import type {
   OrchestrationV2ThreadFusion,
   ThreadId,
 } from "@t3tools/contracts";
+import { findFusionSidekick } from "@t3tools/shared/fusion";
 import { modelSelectionsEqual } from "@t3tools/shared/model";
 
 /** Whether a Fusion pairing change needs a `thread.fusion-updated` event. */
@@ -15,6 +16,7 @@ export function threadFusionChanged(
   return !modelSelectionsEqual(current.sidekick, next.sidekick);
 }
 
+// A failed or cancelled sidekick is replaced rather than continued.
 const REUSABLE_SIDEKICK_STATUSES = new Set<OrchestrationV2Subagent["status"]>([
   "idle",
   "pending",
@@ -22,26 +24,6 @@ const REUSABLE_SIDEKICK_STATUSES = new Set<OrchestrationV2Subagent["status"]>([
   "waiting",
   "completed",
 ]);
-
-/**
- * The lead's current sidekick: its latest app-owned child running the sidekick
- * model that has not failed or been cancelled. Matching on instance and model
- * leaves the lead free to tune options such as effort per delegation.
- */
-export function findFusionSidekick(
-  subagents: ReadonlyArray<OrchestrationV2Subagent>,
-  fusion: OrchestrationV2ThreadFusion,
-): ThreadId | null {
-  const sidekick = subagents.findLast(
-    (subagent) =>
-      subagent.origin === "app_owned" &&
-      subagent.childThreadId !== null &&
-      subagent.modelSelection?.instanceId === fusion.sidekick.instanceId &&
-      subagent.modelSelection.model === fusion.sidekick.model &&
-      REUSABLE_SIDEKICK_STATUSES.has(subagent.status),
-  );
-  return sidekick?.childThreadId ?? null;
-}
 
 /**
  * Instructions prepended to each lead turn while Fusion is on. They carry the
@@ -93,6 +75,8 @@ export function fusionTurnInstructions(input: {
   if (fusion === null || input.compact) return "";
   return fusionLeadInstructions({
     fusion,
-    sidekickThreadId: findFusionSidekick(input.subagents, fusion),
+    sidekickThreadId:
+      findFusionSidekick(input.subagents, fusion, REUSABLE_SIDEKICK_STATUSES)?.childThreadId ??
+      null,
   });
 }

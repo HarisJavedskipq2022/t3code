@@ -9,7 +9,7 @@ import {
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 
-import { findFusionSidekick, fusionTurnInstructions, threadFusionChanged } from "./Fusion.ts";
+import { fusionTurnInstructions, threadFusionChanged } from "./Fusion.ts";
 
 const commandCode = ProviderInstanceId.make("acpRegistry_command_code");
 const fusion: OrchestrationV2ThreadFusion = {
@@ -58,37 +58,6 @@ describe("threadFusionChanged", () => {
   });
 });
 
-describe("findFusionSidekick", () => {
-  it("returns the latest live app-owned child running the sidekick model", () => {
-    const older = subagent({ childThreadId: ThreadId.make("thread-older") });
-    const latest = subagent({ childThreadId: ThreadId.make("thread-latest"), status: "idle" });
-    expect(findFusionSidekick([older, latest], fusion)).toBe("thread-latest");
-  });
-
-  it("matches on instance and model even when the lead changed the effort", () => {
-    const tuned = subagent({
-      modelSelection: { ...fusion.sidekick, options: [{ id: "effort", value: "low" }] },
-    });
-    expect(findFusionSidekick([tuned], fusion)).toBe("thread-sidekick");
-  });
-
-  it("ignores failed, cancelled, interrupted, native, and other-model children", () => {
-    expect(
-      findFusionSidekick(
-        [
-          subagent({ status: "failed" }),
-          subagent({ status: "cancelled" }),
-          subagent({ status: "interrupted" }),
-          subagent({ origin: "provider_native" }),
-          subagent({ modelSelection: { ...fusion.sidekick, model: "kimi-k3" } }),
-          subagent({ childThreadId: null }),
-        ],
-        fusion,
-      ),
-    ).toBeNull();
-  });
-});
-
 describe("fusionTurnInstructions", () => {
   it("is empty without Fusion and for compaction turns", () => {
     expect(fusionTurnInstructions({ thread: {}, subagents: [], compact: false })).toBe("");
@@ -117,5 +86,16 @@ describe("fusionTurnInstructions", () => {
     expect(text).toContain("Your sidekick is thread thread-sidekick");
     expect(text).toContain("Do not start another sidekick");
     expect(text).not.toContain("No sidekick exists yet");
+  });
+
+  it("starts a fresh sidekick once the last one failed, was cancelled, or was interrupted", () => {
+    for (const status of ["failed", "cancelled", "interrupted"] as const) {
+      const text = fusionTurnInstructions({
+        thread: { fusion },
+        subagents: [subagent({ status })],
+        compact: false,
+      });
+      expect(text).toContain("No sidekick exists yet");
+    }
   });
 });

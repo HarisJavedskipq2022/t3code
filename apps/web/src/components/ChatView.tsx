@@ -116,6 +116,7 @@ import {
   type CodexFeedbackSubmission,
 } from "@t3tools/client-runtime/state/threads";
 import { resolveThreadLastVisitedAt } from "./Sidebar.logic";
+import { useFusionSidekickBanner } from "./chat/fusionSidekickBanner";
 import { derivePendingThreadRequests } from "@t3tools/client-runtime/state/thread-requests";
 import {
   parseScopedThreadKey,
@@ -7451,6 +7452,12 @@ export default function ChatView(props: ChatViewProps) {
     },
     [environmentId, navigate],
   );
+  const fusionSidekickBannerItem = useFusionSidekickBanner({
+    threadRef: activeThreadRef,
+    leadWorking: isWorking,
+    leadActivityStartedAt: activeThreadShell?.runtime?.activityStartedAt ?? null,
+    onOpenThread: onOpenRelatedThread,
+  });
   const childThreadInputs = useChildThreadInputs(activeThreadRef);
   const childInputBannerItem = useMemo<ComposerBannerStackItem | null>(() => {
     const first = childThreadInputs[0];
@@ -7850,6 +7857,7 @@ export default function ChatView(props: ChatViewProps) {
   const composerBannerItems = useMemo<ComposerBannerStackItem[]>(() => {
     const limitRecoveryItems = limitRecoveryBanner === null ? [] : [limitRecoveryBanner];
     const backgroundWorkItems = [
+      fusionSidekickBannerItem,
       childInputBannerItem,
       goalBannerItem,
       backgroundWorkBannerItem,
@@ -7925,6 +7933,7 @@ export default function ChatView(props: ChatViewProps) {
     isRestoringThreadBranch,
     backgroundWorkBannerItem,
     childInputBannerItem,
+    fusionSidekickBannerItem,
     goalBannerItem,
     localCheckoutBranchMismatch,
     projectCloneBannerItem,
