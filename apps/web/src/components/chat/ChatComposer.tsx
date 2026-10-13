@@ -1546,6 +1546,8 @@ export interface ChatComposerProps {
   promptHistoryMessages: ReadonlyArray<ChatMessage>;
   isServerThread: boolean;
   isLocalDraftThread: boolean;
+  /** Called when Fusion turns on, so an unstarted thread can move to its own worktree. */
+  onFusionEnabled?: () => void;
   forceExpandedOnMobile: boolean;
   projectSelectionRequired: boolean;
 
@@ -1735,6 +1737,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     promptHistoryMessages,
     isServerThread: _isServerThread,
     isLocalDraftThread: _isLocalDraftThread,
+    onFusionEnabled,
     forceExpandedOnMobile,
     projectSelectionRequired,
     phase,
@@ -5533,7 +5536,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   planModeEnabled={settings.planModeEnabled}
                   size={composerControlsCollapsed ? "xs" : "sm"}
                   disabled={isSendBusy}
-                  onFusionChange={(fusion) => setFusionDraft(composerDraftTargetKey, fusion)}
+                  onFusionChange={(fusion) => {
+                    if (fusion !== null && composerFusion === null) onFusionEnabled?.();
+                    setFusionDraft(composerDraftTargetKey, fusion);
+                  }}
                 />
               </>
             ),

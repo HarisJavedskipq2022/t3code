@@ -7483,12 +7483,19 @@ export default function ChatView(props: ChatViewProps) {
     },
     [environmentId, navigate],
   );
+  const onStopSidekick = useCallback(
+    (threadId: ThreadId) => {
+      void interruptThreadTurn({ environmentId, input: { threadId } });
+    },
+    [environmentId, interruptThreadTurn],
+  );
   const fusionSidekickBannerItem = useFusionSidekickBanner({
     // The guarded ref: subscribing to a draft before its thread exists caches "not found".
     threadRef: routeThreadDetailRef,
     leadWorking: isWorking,
     leadActivityStartedAt: activeThreadShell?.runtime?.activityStartedAt ?? null,
     onOpenThread: onOpenRelatedThread,
+    onStopThread: onStopSidekick,
   });
   const childThreadInputs = useChildThreadInputs(activeThreadRef);
   const childInputBannerItem = useMemo<ComposerBannerStackItem | null>(() => {
@@ -10976,6 +10983,12 @@ export default function ChatView(props: ChatViewProps) {
       setDraftThreadContext,
     ],
   );
+  // Fusion's two agents build a whole feature; an unstarted thread gets its own
+  // branch instead of editing the shared checkout. The selector can switch it back.
+  const onFusionEnabled = useCallback(() => {
+    if (!isGitRepo || envMode !== "local") return;
+    if (isLocalDraftThread || canOverrideServerThreadEnvMode) onEnvModeChange("worktree");
+  }, [canOverrideServerThreadEnvMode, envMode, isGitRepo, isLocalDraftThread, onEnvModeChange]);
 
   // "Work locally" on the setup card: cancel the bootstrap and remember the
   // draft. The cancelled dispatch deletes the half-made thread and puts the
@@ -11785,6 +11798,7 @@ export default function ChatView(props: ChatViewProps) {
                           ) : null}
                           {!composerMounted ? null : (
                             <ChatComposer
+                              onFusionEnabled={onFusionEnabled}
                               canOperateThread={canOperateThread}
                               reportedModelSelection={reportedModelSelection}
                               multipleModelSelections={multipleModelSelections}
