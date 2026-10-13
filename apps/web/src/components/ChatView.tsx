@@ -378,8 +378,10 @@ import {
   type ComposerImageAttachment,
   type DraftThreadEnvMode,
   useComposerDraftStore,
+  composerTargetKey,
   DraftId,
 } from "../composerDraftStore";
+import { useFusionDraftStore } from "../fusionDraftStore";
 import {
   formatTerminalContextLabel,
   type TerminalContextDraft,
@@ -10015,6 +10017,15 @@ export default function ChatView(props: ChatViewProps) {
             })(),
           },
           modelSelection: ctxSelectedModelSelection,
+          ...(() => {
+            // Only an explicit Fusion choice is sent, and only to servers that lead with it.
+            const fusion =
+              useFusionDraftStore.getState().byTargetKey[composerTargetKey(composerDraftTarget)];
+            const supportsFusion =
+              appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment
+                .capabilities.fusion === true;
+            return supportsFusion && fusion !== undefined ? { fusion } : {};
+          })(),
           titleSeed: title,
           runtimeMode,
           interactionMode: sendInteractionMode,

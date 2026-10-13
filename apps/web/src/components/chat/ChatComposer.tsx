@@ -245,7 +245,9 @@ import {
 } from "~/lib/composerContextRecords";
 import { matchComposerThreadItems } from "@t3tools/client-runtime/composerThreadItems";
 import { THREAD_CONTEXT_DROP_EVENT, threadContextDropTargetProps } from "./threadContextDrag";
-import { readThreadShell, useThreadShells } from "~/state/entities";
+import { readThreadShell, useServerConfigs, useThreadShells } from "~/state/entities";
+import { resolveComposerFusion, useFusionDraftStore } from "~/fusionDraftStore";
+import { ComposerFusionControl } from "./ComposerFusionControl";
 import { requestConfirmDialog } from "~/confirmDialog";
 import { encodeComposerContextFragment } from "@t3tools/shared/composerContextClipboard";
 import type { ComposerContextClipboardFragment, ComposerContextRecord } from "@t3tools/contracts";
@@ -2393,6 +2395,12 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   // options are server-reported models plus that exact instance's
   // configured custom models. A missing OpenCode selection is included as
   // an unavailable row until the catalog reports it again.
+  const fusionSupported =
+    useServerConfigs().get(environmentId)?.environment.capabilities.fusion === true;
+  const draftFusion = useFusionDraftStore((state) => state.byTargetKey[composerDraftTargetKey]);
+  const lastFusionSidekick = useFusionDraftStore((state) => state.lastSidekick);
+  const setFusionDraft = useFusionDraftStore((state) => state.setFusion);
+  const composerFusion = resolveComposerFusion(draftFusion, activeThread?.fusion);
   const modelOptionsByInstance = useMemo<
     ReadonlyMap<ProviderInstanceId, ReadonlyArray<AppModelOption>>
   >(() => {
@@ -5505,6 +5513,29 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         />
       ),
     },
+    ...(fusionSupported
+      ? [
+          {
+            id: "fusion",
+            content: (
+              <>
+                <ComposerControlSeparator size={composerControlsCollapsed ? "xs" : "sm"} />
+                <ComposerFusionControl
+                  environmentId={environmentId}
+                  fusion={composerFusion}
+                  defaultSidekick={lastFusionSidekick ?? selectedModelSelection}
+                  instanceEntries={providerInstanceEntries}
+                  modelOptionsByInstance={modelOptionsByInstance}
+                  planModeEnabled={settings.planModeEnabled}
+                  size={composerControlsCollapsed ? "xs" : "sm"}
+                  disabled={isSendBusy}
+                  onFusionChange={(fusion) => setFusionDraft(composerDraftTargetKey, fusion)}
+                />
+              </>
+            ),
+          },
+        ]
+      : []),
   ];
   const hiddenRestingBlockIds = restingBlockDefs
     .slice(restingBlockDefs.length - restingHiddenBlockCount)
