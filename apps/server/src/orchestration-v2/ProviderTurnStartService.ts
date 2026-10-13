@@ -1224,11 +1224,14 @@ export const layer: Layer.Layer<
                 }),
           ),
         );
+      // A Fusion lead's turn always carries its instructions, so it needs the
+      // delivery wrapper even when there is no handoff context.
       const deliverySession =
         effectiveHandoffs.length === 0 &&
         missedItems.length === 0 &&
         restartNote === "" &&
-        !noteContinuation
+        !noteContinuation &&
+        (projection.thread.fusion ?? null) === null
           ? session
           : makeDeliverySession(session, startWithHandoffs);
       yield* runExecution.startRootRun({

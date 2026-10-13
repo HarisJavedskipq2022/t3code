@@ -13,6 +13,7 @@ import {
   RunId,
   ThreadId,
   ProjectId,
+  type OrchestrationV2ThreadFusion,
   type OrchestrationV2ThreadProjection,
   OrchestrationV2DomainEvent,
 } from "@t3tools/contracts";
@@ -171,6 +172,8 @@ function makeLocalCommandHarness(input: {
   readonly writeFailure?: unknown;
   /** Loads the thread and starts the run, then fails every later state read. */
   readonly failReadsAfterRunning?: boolean;
+  /** A Fusion lead whose run starts a provider turn through the returned spy. */
+  readonly fusion?: OrchestrationV2ThreadFusion;
 }) {
   const now = DateTime.makeUnsafe("2026-09-04T12:00:00Z");
   const threadId = ThreadId.make("thread-native-account-command");
@@ -238,6 +241,7 @@ function makeLocalCommandHarness(input: {
       activeProviderThreadId: providerThreadId,
       branch: null,
       worktreePath: null,
+      ...(input.fusion === undefined ? {} : { fusion: input.fusion }),
     } as OrchestrationV2ThreadProjection["thread"],
     runs: [
       ...(input.previousNativeSession
@@ -393,6 +397,9 @@ function makeLocalCommandHarness(input: {
       ),
     ensureThread: () => Effect.succeed(providerThread),
   };
+  const providerStartTurn = vi.fn(
+    (_turn: { readonly message: { readonly text: string } }) => Effect.succeed({}) as never,
+  );
   const open = vi.fn(() =>
     input.interruptOpen === true
       ? Effect.interrupt
@@ -414,7 +421,7 @@ function makeLocalCommandHarness(input: {
                   ),
                 ),
               )
-            : input.failReadsAfterRunning === true
+            : input.failReadsAfterRunning === true || input.fusion !== undefined
               ? Effect.succeed({
                   driver: providerThread.driver,
                   providerSession: {
@@ -430,15 +437,18 @@ function makeLocalCommandHarness(input: {
                     lastError: null,
                   },
                   ensureThread: () => Effect.succeed(providerThread),
+                  startTurn: providerStartTurn,
                 } as never)
               : Effect.die("A local command must not open a native session."),
   );
   const startRootRun = vi.fn<
     (input: RunExecutionService.RunExecutionServiceV2StartRootRunInput) => Effect.Effect<void>
-  >(() =>
-    input.failReadsAfterRunning === true
-      ? Effect.void
-      : Effect.die("A local command must not start a native turn."),
+  >((runInput) =>
+    input.fusion !== undefined
+      ? runInput.session.startTurn({ message: runInput.message } as never).pipe(Effect.asVoid)
+      : input.failReadsAfterRunning === true
+        ? Effect.void
+        : Effect.die("A local command must not start a native turn."),
   );
   const failReadIfRunning = Effect.suspend(() =>
     input.failReadsAfterRunning === true &&
@@ -534,6 +544,7 @@ function makeLocalCommandHarness(input: {
     open,
     writeIfRunCurrent,
     startRootRun,
+    providerStartTurn,
     tryHandlePromptCommand,
     events,
     oldInstanceId,
@@ -855,3 +866,25 @@ for (const previousMessages of [[], ["/compact", " /COMPACT "]]) {
       }),
   );
 }
+
+effectIt.effect("prefixes a Fusion lead's turn with its instructions and the sidekick target", () =>
+  Effect.gen(function* () {
+    const harness = makeLocalCommandHarness({
+      text: "Add a multiply function",
+      fusion: {
+        sidekick: {
+          instanceId: ProviderInstanceId.make("acpRegistry_command_code"),
+          model: "deepseek/deepseek-v4.1-flash",
+        },
+      },
+    });
+
+    yield* harness.start;
+
+    const text = harness.providerStartTurn.mock.calls[0]?.[0].message.text ?? "";
+    expect(text).toMatch(/^<t3_fusion>/);
+    expect(text).toContain('"providerInstanceId":"acpRegistry_command_code"');
+    expect(text).toContain("No sidekick exists yet");
+    expect(text).toMatch(/User message:\nAdd a multiply function$/);
+  }),
+);
