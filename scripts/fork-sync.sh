@@ -44,7 +44,7 @@ install_latest() {
     python3 -c 'import subprocess, sys; subprocess.Popen(sys.argv[1:], start_new_session=True,
       stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)' \
       /bin/bash -c 'while pgrep -f "$0/Contents/MacOS/" >/dev/null; do sleep 2; done
-        "$1" --install && open "$0"' "$APP_PATH" "$REPO/scripts/fork-sync.sh"
+        "$1" --install && sleep 2 && open "$0"' "$APP_PATH" "$REPO/scripts/fork-sync.sh"
     notify "Update built. Quit $APP_NAME (Cmd-Q); it installs and reopens on its own."
     return 0
   fi
