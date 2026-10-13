@@ -5,18 +5,28 @@ import type {
   ProviderInstanceId,
 } from "@t3tools/contracts";
 import { createModelSelection } from "@t3tools/shared/model";
-import { CombineIcon, XIcon } from "lucide-react";
+import { CombineIcon } from "lucide-react";
 import { memo } from "react";
 
 import type { ProviderInstanceEntry } from "~/providerInstances";
+import { Button } from "../ui/button";
+import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { ComposerControl, ComposerControlIcon, type ComposerControlSize } from "./ComposerControl";
+import {
+  ComposerControl,
+  ComposerControlChevron,
+  ComposerControlIcon,
+  type ComposerControlSize,
+} from "./ComposerControl";
 import { ProviderModelPicker } from "./ProviderModelPicker";
+import { getTriggerDisplayModelName } from "./providerIconUtils";
 import { TraitsPicker } from "./TraitsPicker";
 
+type ModelOptionsByInstance = Parameters<typeof ProviderModelPicker>[0]["modelOptionsByInstance"];
+
 /**
- * Fusion toggle and sidekick picker. The thread's own model leads; the sidekick
- * chosen here writes the code in one persistent child thread.
+ * Fusion in one composer control: a toggle while off, and while on a pill
+ * naming the sidekick whose panel holds its model, effort, and the way out.
  */
 export const ComposerFusionControl = memo(function ComposerFusionControl(props: {
   environmentId: EnvironmentId;
@@ -24,18 +34,13 @@ export const ComposerFusionControl = memo(function ComposerFusionControl(props: 
   /** Offered as the sidekick when Fusion is turned on. */
   defaultSidekick: ModelSelection;
   instanceEntries: ReadonlyArray<ProviderInstanceEntry>;
-  modelOptionsByInstance: Parameters<typeof ProviderModelPicker>[0]["modelOptionsByInstance"];
+  modelOptionsByInstance: ModelOptionsByInstance;
   planModeEnabled: boolean;
   size: ComposerControlSize;
   disabled: boolean;
   onFusionChange: (fusion: OrchestrationV2ThreadFusion | null) => void;
 }) {
   const sidekick = props.fusion?.sidekick ?? null;
-  const sidekickEntry =
-    sidekick === null
-      ? undefined
-      : props.instanceEntries.find((entry) => entry.instanceId === sidekick.instanceId);
-  const setSidekick = (next: ModelSelection) => props.onFusionChange({ sidekick: next });
 
   if (sidekick === null) {
     return (
@@ -47,7 +52,7 @@ export const ComposerFusionControl = memo(function ComposerFusionControl(props: 
               aria-pressed={false}
               disabled={props.disabled}
               aria-label="Turn on Fusion"
-              onClick={() => setSidekick(props.defaultSidekick)}
+              onClick={() => props.onFusionChange({ sidekick: props.defaultSidekick })}
             />
           }
         >
@@ -63,62 +68,86 @@ export const ComposerFusionControl = memo(function ComposerFusionControl(props: 
     );
   }
 
+  const sidekickEntry = props.instanceEntries.find(
+    (entry) => entry.instanceId === sidekick.instanceId,
+  );
+  const sidekickOption = props.modelOptionsByInstance
+    .get(sidekick.instanceId)
+    ?.find((option) => option.slug === sidekick.model);
+  const sidekickName = sidekickOption ? getTriggerDisplayModelName(sidekickOption) : sidekick.model;
+  const setSidekick = (next: ModelSelection) => props.onFusionChange({ sidekick: next });
+
   return (
-    <span className="inline-flex min-w-0 items-center gap-0.5">
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <ComposerControl
-              size={props.size}
-              aria-pressed
-              disabled={props.disabled}
-              aria-label="Turn off Fusion"
-              onClick={() => props.onFusionChange(null)}
-            />
-          }
-        >
-          <ComposerControlIcon icon={CombineIcon} size={props.size} />
-          <span data-composer-control-label className="sr-only sm:not-sr-only">
-            Fusion
-          </span>
-          <XIcon aria-hidden className="size-3 opacity-60" />
-        </TooltipTrigger>
-        <TooltipPopup side="top">Fusion is on. Click to turn it off.</TooltipPopup>
-      </Tooltip>
-      <ProviderModelPicker
-        environmentId={props.environmentId}
-        compact
-        isComposerOwned
-        disabled={props.disabled}
-        activeInstanceId={sidekick.instanceId}
-        model={sidekick.model}
-        lockedProvider={null}
-        instanceEntries={props.instanceEntries}
-        modelOptionsByInstance={props.modelOptionsByInstance}
-        size={props.size}
-        triggerAriaLabel="Fusion sidekick model"
-        onInstanceModelChange={(instanceId: ProviderInstanceId, model: string) =>
-          setSidekick(createModelSelection(instanceId, model))
+    <Popover>
+      <PopoverTrigger
+        render={
+          <ComposerControl
+            size={props.size}
+            aria-pressed
+            disabled={props.disabled}
+            aria-label={`Fusion on, sidekick ${sidekickName}`}
+          />
         }
-      />
-      {sidekickEntry ? (
-        <TraitsPicker
-          provider={sidekickEntry.driverKind}
-          models={sidekickEntry.models}
-          model={sidekick.model}
-          prompt=""
-          onPromptChange={() => {}}
-          modelOptions={sidekick.options ?? []}
-          allowPromptInjectedEffort={false}
-          planModeEnabled={props.planModeEnabled}
-          isComposerOwned
-          size={props.size}
-          disabled={props.disabled}
-          onModelOptionsChange={(options) =>
-            setSidekick(createModelSelection(sidekick.instanceId, sidekick.model, options))
-          }
-        />
-      ) : null}
-    </span>
+      >
+        <ComposerControlIcon icon={CombineIcon} size={props.size} />
+        <span data-composer-control-label className="sr-only max-w-32 truncate sm:not-sr-only">
+          {sidekickName}
+        </span>
+        <ComposerControlChevron size={props.size} />
+      </PopoverTrigger>
+      <PopoverPopup side="top" align="start" width="sm" padding="compact">
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-0.5">
+            <p className="text-sm font-medium">Fusion</p>
+            <p className="text-xs text-muted-foreground">
+              The thread&apos;s model leads and reviews. The sidekick writes the code in one ongoing
+              sub-thread.
+            </p>
+          </div>
+          <div className="flex min-w-0 items-center gap-1">
+            <ProviderModelPicker
+              environmentId={props.environmentId}
+              compact
+              disabled={props.disabled}
+              activeInstanceId={sidekick.instanceId}
+              model={sidekick.model}
+              lockedProvider={null}
+              instanceEntries={props.instanceEntries}
+              modelOptionsByInstance={props.modelOptionsByInstance}
+              size="sm"
+              triggerAriaLabel="Fusion sidekick model"
+              onInstanceModelChange={(instanceId: ProviderInstanceId, model: string) =>
+                setSidekick(createModelSelection(instanceId, model))
+              }
+            />
+            {sidekickEntry ? (
+              <TraitsPicker
+                provider={sidekickEntry.driverKind}
+                models={sidekickEntry.models}
+                model={sidekick.model}
+                prompt=""
+                onPromptChange={() => {}}
+                modelOptions={sidekick.options ?? []}
+                allowPromptInjectedEffort={false}
+                planModeEnabled={props.planModeEnabled}
+                size="sm"
+                disabled={props.disabled}
+                onModelOptionsChange={(options) =>
+                  setSidekick(createModelSelection(sidekick.instanceId, sidekick.model, options))
+                }
+              />
+            ) : null}
+          </div>
+          <Button
+            size="xs"
+            variant="ghost"
+            className="self-start"
+            onClick={() => props.onFusionChange(null)}
+          >
+            Turn off Fusion
+          </Button>
+        </div>
+      </PopoverPopup>
+    </Popover>
   );
 });
