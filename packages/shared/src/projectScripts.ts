@@ -1,4 +1,5 @@
 import type { ProjectId, ProjectScript, ServerSettings } from "@t3tools/contracts";
+import * as Hash from "effect/Hash";
 
 type ProjectScriptSettings = Pick<
   ServerSettings,
@@ -55,11 +56,24 @@ export function projectScriptCwd(input: {
   return input.worktreePath ?? input.project.cwd;
 }
 
+// Matches `vp run dev`'s per-worktree offsets (scripts/dev-runner.ts).
+const MAX_WORKTREE_PORT_OFFSET = 3000;
+
+/**
+ * A stable port offset for a script's checkout: 0 in the project's own folder,
+ * 1–3000 in a worktree. Scripts add it to their base ports (exposed as
+ * T3CODE_PORT_OFFSET) so servers in different worktrees can run side by side.
+ */
+export function projectScriptPortOffset(worktreePath: string | null | undefined): number {
+  return worktreePath ? ((Hash.string(worktreePath) >>> 0) % MAX_WORKTREE_PORT_OFFSET) + 1 : 0;
+}
+
 export function projectScriptRuntimeEnv(
   input: ProjectScriptRuntimeEnvInput,
 ): Record<string, string> {
   const env: Record<string, string> = {
     T3CODE_PROJECT_ROOT: input.project.cwd,
+    T3CODE_PORT_OFFSET: String(projectScriptPortOffset(input.worktreePath)),
   };
   if (input.worktreePath) {
     env.T3CODE_WORKTREE_PATH = input.worktreePath;

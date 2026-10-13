@@ -203,6 +203,19 @@ describe("projectScripts helpers", () => {
     });
   });
 
+  it("gives each worktree a stable port offset and the project folder none", () => {
+    const first = projectScriptRuntimeEnv({ project: { cwd: "/repo" }, worktreePath: "/wt/a" });
+    const again = projectScriptRuntimeEnv({ project: { cwd: "/repo" }, worktreePath: "/wt/a" });
+    const other = projectScriptRuntimeEnv({ project: { cwd: "/repo" }, worktreePath: "/wt/b" });
+    const offset = Number(first.T3CODE_PORT_OFFSET);
+
+    expect(offset).toBeGreaterThanOrEqual(1);
+    expect(offset).toBeLessThanOrEqual(3000);
+    expect(again.T3CODE_PORT_OFFSET).toBe(first.T3CODE_PORT_OFFSET);
+    expect(other.T3CODE_PORT_OFFSET).not.toBe(first.T3CODE_PORT_OFFSET);
+    expect(projectScriptRuntimeEnv({ project: { cwd: "/repo" } }).T3CODE_PORT_OFFSET).toBe("0");
+  });
+
   it("allows overriding runtime env values", () => {
     const env = projectScriptRuntimeEnv({
       project: { cwd: "/repo" },
