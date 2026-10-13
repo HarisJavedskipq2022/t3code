@@ -5,11 +5,11 @@ import { Atom } from "effect/reactivity";
 import { CombineIcon } from "lucide-react";
 import { useMemo } from "react";
 
-import { useThreadShell } from "~/state/entities";
+import { useThreadShell, useThreadVisibleTurnItems } from "~/state/entities";
 import { environmentThreadDetails } from "~/state/threads";
 import { Button } from "../ui/button";
 import type { ComposerBannerStackItem } from "./ComposerBannerStack";
-import { resolveFusionSidekickActivity } from "./fusionSidekickBanner.logic";
+import { describeSidekickStep, resolveFusionSidekickActivity } from "./fusionSidekickBanner.logic";
 
 const NO_SIDEKICK_ATOM = Atom.make<OrchestrationV2Subagent | null>(null).pipe(
   Atom.withLabel("fusion-sidekick:none"),
@@ -49,6 +49,10 @@ export function useFusionSidekickBanner(input: {
   });
 
   const kind = activity?.kind ?? null;
+  // Only a working sidekick's thread is read, and only while the lead's thread is open.
+  const step = describeSidekickStep(
+    useThreadVisibleTurnItems(kind === "working" ? childRef : null),
+  );
   const title = activity?.title ?? null;
   const reason = activity?.reason ?? null;
   return useMemo(() => {
@@ -59,12 +63,12 @@ export function useFusionSidekickBanner(input: {
       priority: "activity",
       icon: <CombineIcon />,
       title: TITLES[kind],
-      description: reason ?? title,
+      description: reason ?? step ?? title,
       actions: (
         <Button size="xs" variant="ghost" onClick={() => onOpenThread(childThreadId)}>
           Open sidekick
         </Button>
       ),
     };
-  }, [kind, childThreadId, title, reason, onOpenThread]);
+  }, [kind, childThreadId, step, title, reason, onOpenThread]);
 }

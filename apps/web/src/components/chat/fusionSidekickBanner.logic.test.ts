@@ -1,7 +1,12 @@
-import { ProviderInstanceId, RunId, ThreadId } from "@t3tools/contracts";
+import {
+  type OrchestrationV2ProjectedTurnItem,
+  ProviderInstanceId,
+  RunId,
+  ThreadId,
+} from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { resolveFusionSidekickActivity } from "./fusionSidekickBanner.logic";
+import { describeSidekickStep, resolveFusionSidekickActivity } from "./fusionSidekickBanner.logic";
 
 const sidekick = { childThreadId: ThreadId.make("thread-sidekick"), status: "idle" } as const;
 const leadActivityStartedAt = "2026-10-13T10:00:00.000Z";
@@ -107,5 +112,48 @@ describe("resolveFusionSidekickActivity", () => {
         leadActivityStartedAt,
       }),
     ).toBeNull();
+  });
+});
+
+type Row = Pick<OrchestrationV2ProjectedTurnItem, "visibility" | "item">;
+// Only the fields the describer reads; the rest of a turn item is irrelevant here.
+const row = (item: Record<string, unknown>, visibility: Row["visibility"] = "local"): Row =>
+  ({ visibility, item }) as unknown as Row;
+
+describe("describeSidekickStep", () => {
+  it("names the sidekick's newest step of its own", () => {
+    expect(
+      describeSidekickStep([
+        row({ type: "assistant_message", text: "Looking at the repo" }),
+        row({ type: "file_change", fileName: "src/greeting/hello.py" }),
+      ]),
+    ).toBe("Editing hello.py");
+    expect(
+      describeSidekickStep([row({ type: "command_execution", input: "python3 test_hello.py\n" })]),
+    ).toBe("Running python3 test_hello.py");
+    expect(describeSidekickStep([row({ type: "reasoning" })])).toBe("Thinking");
+  });
+
+  it("skips the lead's inherited history and empty messages", () => {
+    expect(
+      describeSidekickStep([
+        row({ type: "command_execution", input: "npm test" }),
+        row({ type: "file_change", fileName: "lead.ts" }, "inherited"),
+        row({ type: "assistant_message", text: "   " }),
+      ]),
+    ).toBe("Running npm test");
+  });
+
+  it("shortens a long message to its first line", () => {
+    const step = describeSidekickStep([
+      row({ type: "assistant_message", text: `${"word ".repeat(30)}\nsecond line` }),
+    ]);
+    expect(step?.length).toBe(80);
+    expect(step?.endsWith("…")).toBe(true);
+  });
+
+  it("says nothing before the sidekick starts on the newest request", () => {
+    expect(describeSidekickStep([row({ type: "user_message", text: "Add a test" })])).toBeNull();
+    expect(describeSidekickStep([])).toBeNull();
   });
 });

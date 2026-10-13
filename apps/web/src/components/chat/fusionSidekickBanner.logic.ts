@@ -2,7 +2,11 @@ import {
   threadRuntimeIsActive,
   type EnvironmentThreadShell,
 } from "@t3tools/client-runtime/state/models";
-import type { OrchestrationV2Subagent, ThreadId } from "@t3tools/contracts";
+import type {
+  OrchestrationV2ProjectedTurnItem,
+  OrchestrationV2Subagent,
+  ThreadId,
+} from "@t3tools/contracts";
 
 export type FusionSidekickActivity = Readonly<{
   kind: "working" | "finished" | "stopped";
@@ -44,4 +48,49 @@ export function resolveFusionSidekickActivity(input: {
   return STOPPED_STATUSES.has(sidekick.status) || STOPPED_STATUSES.has(runtime.status)
     ? { ...base, kind: "stopped", reason: runtime.lastError }
     : { ...base, kind: "finished" };
+}
+
+const STEP_MAX_LENGTH = 80;
+
+function firstLine(text: string): string {
+  const line = text.trim().split("\n", 1)[0]!.trim();
+  return line.length > STEP_MAX_LENGTH ? `${line.slice(0, STEP_MAX_LENGTH - 1)}…` : line;
+}
+
+/**
+ * A few words on what a working sidekick is doing, from its newest item of its
+ * own; items inherited from the lead's conversation are skipped.
+ */
+export function describeSidekickStep(
+  items: ReadonlyArray<Pick<OrchestrationV2ProjectedTurnItem, "visibility" | "item">>,
+): string | null {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const { item, visibility } = items[index]!;
+    if (visibility !== "local") continue;
+    switch (item.type) {
+      case "file_change":
+        return `Editing ${item.fileName.split("/").at(-1)}`;
+      case "command_execution":
+        return `Running ${firstLine(item.input)}`;
+      case "assistant_message": {
+        const line = firstLine(item.text);
+        if (line) return line;
+        continue;
+      }
+      case "reasoning":
+        return "Thinking";
+      case "web_search":
+        return "Searching the web";
+      case "file_search":
+        return "Searching files";
+      case "dynamic_tool":
+        return item.title?.trim() || "Using a tool";
+      case "user_message":
+        // The lead's request is the newest item: the sidekick has not started on it.
+        return null;
+      default:
+        continue;
+    }
+  }
+  return null;
 }
