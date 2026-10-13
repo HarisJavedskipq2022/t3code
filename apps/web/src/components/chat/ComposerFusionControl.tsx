@@ -96,8 +96,8 @@ export const ComposerFusionControl = memo(function ComposerFusionControl(props: 
         </span>
         <ComposerControlChevron size={props.size} />
       </PopoverTrigger>
-      <PopoverPopup side="top" align="start" width="sm" padding="compact">
-        <div className="flex flex-col gap-2">
+      <PopoverPopup side="top" align="start" width="md" padding="compact">
+        <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-0.5">
             <p className="text-sm font-medium">Fusion</p>
             <p className="text-xs text-muted-foreground">
@@ -105,39 +105,42 @@ export const ComposerFusionControl = memo(function ComposerFusionControl(props: 
               sub-thread.
             </p>
           </div>
-          <div className="flex min-w-0 items-center gap-1">
-            <ProviderModelPicker
-              environmentId={props.environmentId}
-              compact
-              disabled={props.disabled}
-              activeInstanceId={sidekick.instanceId}
-              model={sidekick.model}
-              lockedProvider={null}
-              instanceEntries={props.instanceEntries}
-              modelOptionsByInstance={props.modelOptionsByInstance}
-              size="sm"
-              triggerAriaLabel="Fusion sidekick model"
-              onInstanceModelChange={(instanceId: ProviderInstanceId, model: string) =>
-                setSidekick(createModelSelection(instanceId, model))
-              }
-            />
-            {sidekickEntry ? (
-              <TraitsPicker
-                provider={sidekickEntry.driverKind}
-                models={sidekickEntry.models}
-                model={sidekick.model}
-                prompt=""
-                onPromptChange={() => {}}
-                modelOptions={sidekick.options ?? []}
-                allowPromptInjectedEffort={false}
-                planModeEnabled={props.planModeEnabled}
-                size="sm"
+          <div className="flex flex-col gap-1">
+            <p className="text-xs font-medium text-muted-foreground">Sidekick</p>
+            {/* Wraps rather than overflowing: the popup clips anything past its edge. */}
+            <div className="flex min-w-0 flex-wrap items-center gap-1">
+              <ProviderModelPicker
+                environmentId={props.environmentId}
                 disabled={props.disabled}
-                onModelOptionsChange={(options) =>
-                  setSidekick(createModelSelection(sidekick.instanceId, sidekick.model, options))
+                activeInstanceId={sidekick.instanceId}
+                model={sidekick.model}
+                lockedProvider={null}
+                instanceEntries={props.instanceEntries}
+                modelOptionsByInstance={props.modelOptionsByInstance}
+                size="sm"
+                triggerAriaLabel="Fusion sidekick model"
+                onInstanceModelChange={(instanceId: ProviderInstanceId, model: string) =>
+                  setSidekick(createModelSelection(instanceId, model))
                 }
               />
-            ) : null}
+              {sidekickEntry ? (
+                <TraitsPicker
+                  provider={sidekickEntry.driverKind}
+                  models={sidekickEntry.models}
+                  model={sidekick.model}
+                  prompt=""
+                  onPromptChange={() => {}}
+                  modelOptions={sidekick.options ?? []}
+                  allowPromptInjectedEffort={false}
+                  planModeEnabled={props.planModeEnabled}
+                  size="sm"
+                  disabled={props.disabled}
+                  onModelOptionsChange={(options) =>
+                    setSidekick(createModelSelection(sidekick.instanceId, sidekick.model, options))
+                  }
+                />
+              ) : null}
+            </div>
           </div>
           <Button
             size="xs"
