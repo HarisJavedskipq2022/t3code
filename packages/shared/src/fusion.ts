@@ -15,8 +15,9 @@ export function findFusionSidekick(
     if (
       subagent.origin === "app_owned" &&
       subagent.childThreadId !== null &&
-      subagent.modelSelection?.instanceId === fusion.sidekick.instanceId &&
-      subagent.modelSelection.model === fusion.sidekick.model &&
+      subagent.providerInstanceId === fusion.sidekick.instanceId &&
+      // delegate_task records the model slug; only some paths add modelSelection.
+      (subagent.modelSelection?.model ?? subagent.model) === fusion.sidekick.model &&
       (statuses === undefined || statuses.has(subagent.status))
     ) {
       return subagent;

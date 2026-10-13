@@ -53,12 +53,18 @@ describe("findFusionSidekick", () => {
     expect(findFusionSidekick([older, latest], fusion)?.childThreadId).toBe("thread-latest");
   });
 
-  it("skips native, other-model, and thread-less children", () => {
+  it("matches delegate_task records, which carry the model slug but no modelSelection", () => {
+    const { modelSelection: _omitted, ...delegated } = subagent({});
+    expect(findFusionSidekick([delegated], fusion)).toBe(delegated);
+  });
+
+  it("skips native, other-model, other-instance, and thread-less children", () => {
     expect(
       findFusionSidekick(
         [
           subagent({ origin: "provider_native" }),
           subagent({ modelSelection: { ...fusion.sidekick, model: "kimi-k3" } }),
+          subagent({ providerInstanceId: ProviderInstanceId.make("codex") }),
           subagent({ childThreadId: null }),
         ],
         fusion,
