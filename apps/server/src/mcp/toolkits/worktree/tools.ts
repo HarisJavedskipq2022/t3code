@@ -1,3 +1,5 @@
+import { WorktreeServiceControlInput, WorktreeServicesSnapshot } from "@t3tools/contracts";
+import * as WorktreeServices from "../../../project/WorktreeServices.ts";
 import {
   WorktreeMcpFailure,
   OrchestratorMcpFailure,
@@ -82,7 +84,34 @@ const WorktreeListTool = Tool.make("t3_worktree_list", {
 })
   .annotate(Tool.Readonly, true)
   .annotate(Tool.Destructive, false);
+const WorktreeServicesTool = Tool.make("t3_worktree_services", {
+  description:
+    "List configured app services in this thread's worktree, with process status, listening ports, browser URLs and terminal references for logs. Running describes a process, not application health.",
+  success: WorktreeServicesSnapshot,
+  failure: WorktreeToolFailure,
+  failureMode: "return",
+  dependencies: [...dependencies, WorktreeServices.WorktreeServices],
+})
+  .annotate(Tool.Readonly, true)
+  .annotate(Tool.Destructive, false);
+const WorktreeServiceControlTool = Tool.make("t3_worktree_service_control", {
+  description:
+    "Start, stop or restart saved app services in this thread's worktree. Omit scriptId to act on the group. Requires a live full-access/default thread. Inspect each returned service for partial failures; this never stops unrelated port owners.",
+  parameters: Schema.Struct({
+    scriptId: WorktreeServiceControlInput.fields.scriptId,
+    action: WorktreeServiceControlInput.fields.action,
+  }),
+  success: WorktreeServicesSnapshot,
+  failure: WorktreeToolFailure,
+  failureMode: "return",
+  dependencies: [...dependencies, WorktreeServices.WorktreeServices],
+})
+  .annotate(Tool.Readonly, false)
+  .annotate(Tool.Destructive, true);
+
 export const WorktreeToolkit = Toolkit.make(
+  WorktreeServicesTool,
+  WorktreeServiceControlTool,
   WorktreeHandoffTool,
   WorktreeStatusTool,
   WorktreeListTool,

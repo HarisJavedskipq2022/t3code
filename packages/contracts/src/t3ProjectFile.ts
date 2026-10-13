@@ -2,6 +2,7 @@ import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";
 
 import { ThreadEnvMode, WorktreeSubmodules } from "./environment.ts";
+import { PortSchema } from "./baseSchemas.ts";
 import { ProjectScriptIcon } from "./project.ts";
 import type { ProjectScopedServerSettingKey, ServerSettings } from "./settings.ts";
 
@@ -65,6 +66,18 @@ export const T3ProjectFileScript = Schema.Struct({
     Schema.Boolean.annotate({
       description:
         "When true, automatically open the preview panel at `previewUrl` the moment the script starts.",
+    }),
+  ),
+  service: Schema.optionalKey(
+    Schema.Boolean.annotate({
+      description:
+        "Marks the script as an app service. Services appear in the worktree services panel and are started together, instead of running as an ordinary action. Cannot be combined with runOnWorktreeCreate or runOnSettle.",
+    }),
+  ),
+  servicePort: Schema.optionalKey(
+    PortSchema.annotate({
+      description:
+        "Base port for the service. T3 Code adds the checkout's worktree port offset and exposes the result as PORT and T3CODE_SERVICE_PORT. Omitted means the script configures no port.",
     }),
   ),
 }).annotate({

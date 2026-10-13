@@ -12,6 +12,7 @@ import {
   StoredProjectIcon,
   ProjectReadFileError,
   ProjectCreatePayload,
+  ProjectScript,
   ProjectUpdatePayload,
   ProjectMutation,
   ProjectSearchContentsError,
@@ -26,6 +27,7 @@ const decodeProjectUpdatePayload = Schema.decodeUnknownSync(ProjectUpdatePayload
 const decodeProjectMutation = Schema.decodeUnknownSync(ProjectMutation);
 const decodeSearchEntriesInput = Schema.decodeUnknownSync(ProjectSearchEntriesInput);
 const decodeSearchContentsInput = Schema.decodeUnknownSync(ProjectSearchContentsInput);
+const decodeProjectScript = Schema.decodeUnknownSync(ProjectScript);
 
 describe("project search inputs", () => {
   it("allows an empty entries query for bounded frecency browsing", () => {
@@ -48,6 +50,39 @@ describe("project search inputs", () => {
       useRegex: false,
     });
     expect(decoded.query).toBe(" foo ");
+  });
+});
+
+describe("project script services", () => {
+  const ordinary = {
+    id: "test",
+    name: "Test",
+    command: "bun test",
+    icon: "test",
+    runOnWorktreeCreate: false,
+  } as const;
+
+  it("decodes an ordinary action without service fields", () => {
+    const decoded = decodeProjectScript(ordinary);
+    expect(decoded).toEqual(ordinary);
+    expect(decoded.service).toBeUndefined();
+    expect(decoded.servicePort).toBeUndefined();
+  });
+
+  it("decodes a marked service with a base port", () => {
+    const decoded = decodeProjectScript({ ...ordinary, service: true, servicePort: 3000 });
+    expect(decoded.service).toBe(true);
+    expect(decoded.servicePort).toBe(3000);
+  });
+
+  it("decodes a service that configures no port", () => {
+    const decoded = decodeProjectScript({ ...ordinary, service: true });
+    expect(decoded.service).toBe(true);
+    expect(decoded.servicePort).toBeUndefined();
+  });
+
+  it.each([0, -1, 65536, 3000.5, Number.NaN])("rejects base port %s", (servicePort) => {
+    expect(() => decodeProjectScript({ ...ordinary, service: true, servicePort })).toThrow();
   });
 });
 

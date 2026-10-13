@@ -11,6 +11,10 @@ import { useCallback, useMemo, useState } from "react";
 import { useT3ProjectFileState } from "../../hooks/useT3ProjectFileScripts";
 import { useEnvironments } from "../../state/environments";
 import {
+  projectScriptInputFromFileScript,
+  projectScriptServiceConflict,
+} from "../../projectScripts";
+import {
   EMPTY_PROJECT_SCRIPT_INPUT,
   editorRequestForScript,
   ProjectScriptEditorDialog,
@@ -110,16 +114,14 @@ export function ProjectActionsSettings() {
   const importFileScript = useCallback(
     async (fileScript: T3ProjectFileScript) => {
       const payload: NewProjectScriptInput = {
-        name: fileScript.name,
-        command: fileScript.command,
-        icon: fileScript.icon ?? "play",
-        runOnWorktreeCreate: fileScript.runOnWorktreeCreate ?? false,
-        waitForSetup: fileScript.runOnWorktreeCreate === true && fileScript.async === false,
-        runOnSettle: fileScript.runOnSettle ?? false,
+        ...projectScriptInputFromFileScript(fileScript),
         keybinding: null,
-        previewUrl: fileScript.previewUrl ?? null,
-        autoOpenPreview: fileScript.previewUrl ? (fileScript.autoOpenPreview ?? false) : false,
       };
+      const conflict = projectScriptServiceConflict(payload);
+      if (conflict) {
+        setRequest({ scriptId: null, initial: payload, error: conflict });
+        return;
+      }
       const result = await submit(null, payload);
       if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
         const error = squashAtomCommandFailure(result);

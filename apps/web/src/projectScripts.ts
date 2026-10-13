@@ -3,8 +3,10 @@ import {
   SCRIPT_RUN_COMMAND_PATTERN,
   type KeybindingCommand,
   type ProjectScript,
+  type T3ProjectFileScript,
 } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
+import type { NewProjectScriptInput } from "./components/projectScriptEditor";
 const isScriptRunCommand = Schema.is(SCRIPT_RUN_COMMAND_PATTERN);
 
 export interface ProjectScriptInput {
@@ -16,6 +18,10 @@ export interface ProjectScriptInput {
   readonly runOnSettle: boolean;
   readonly previewUrl: Exclude<ProjectScript["previewUrl"], undefined> | null;
   readonly autoOpenPreview: boolean;
+  /** Marks the action as a long-running app service. Defaults to false. */
+  readonly service?: boolean;
+  /** Base port for the service; the worktree offset is added at runtime. */
+  readonly servicePort?: number | null;
 }
 
 export function buildProjectScript(id: string, input: ProjectScriptInput): ProjectScript {
@@ -33,6 +39,52 @@ export function buildProjectScript(id: string, input: ProjectScriptInput): Proje
           previewUrl: input.previewUrl,
           autoOpenPreview: input.autoOpenPreview,
         }),
+    ...(input.service ? { service: true } : {}),
+    ...(input.service && input.servicePort != null ? { servicePort: input.servicePort } : {}),
+  };
+}
+
+/**
+ * A service is a long-running action, so it cannot also hold the setup or
+ * settle role. Returns the message to show when both are set, else null.
+ */
+export function projectScriptServiceConflict(input: {
+  service?: boolean | undefined;
+  runOnWorktreeCreate?: boolean | undefined;
+  runOnSettle?: boolean | undefined;
+}): string | null {
+  if (input.service !== true) return null;
+  if (input.runOnWorktreeCreate && input.runOnSettle) {
+    return "An app service can't also be the setup and settle action. Turn off the service switch, or clear both roles.";
+  }
+  if (input.runOnWorktreeCreate) {
+    return "An app service can't also be the setup action. Turn off the service switch, or clear 'Run automatically on worktree creation'.";
+  }
+  if (input.runOnSettle) {
+    return "An app service can't also be the settle action. Turn off the service switch, or clear 'Run in the thread's worktree when the thread settles'.";
+  }
+  return null;
+}
+
+/**
+ * Maps a script declared in `t3.json` to the action editor's input, preserving
+ * every field the file declares. The caller owns the shortcut, which is not
+ * part of the file.
+ */
+export function projectScriptInputFromFileScript(
+  fileScript: T3ProjectFileScript,
+): Omit<NewProjectScriptInput, "keybinding"> {
+  return {
+    name: fileScript.name,
+    command: fileScript.command,
+    icon: fileScript.icon ?? "play",
+    runOnWorktreeCreate: fileScript.runOnWorktreeCreate ?? false,
+    waitForSetup: fileScript.runOnWorktreeCreate === true && fileScript.async === false,
+    runOnSettle: fileScript.runOnSettle ?? false,
+    service: fileScript.service ?? false,
+    servicePort: fileScript.servicePort ?? null,
+    previewUrl: fileScript.previewUrl ?? null,
+    autoOpenPreview: fileScript.previewUrl ? (fileScript.autoOpenPreview ?? false) : false,
   };
 }
 

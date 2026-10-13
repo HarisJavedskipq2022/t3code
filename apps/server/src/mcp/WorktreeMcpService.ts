@@ -1,4 +1,12 @@
 import {
+  WorktreeServicesError,
+  type WorktreeServiceControlInput,
+  type WorktreeServicesSnapshot,
+} from "@t3tools/contracts";
+import * as WorktreeServices from "../project/WorktreeServices.ts";
+import * as Invocation from "./McpInvocationContext.ts";
+import { loadCaller, assertLiveCaller, assertFullAccess } from "./threadAccess.ts";
+import {
   CommandId,
   MessageId,
   type ProjectId,
@@ -28,6 +36,21 @@ import type { McpInvocationScope, McpThreadInvocationScope } from "./McpInvocati
 export class WorktreeMcpService extends Context.Service<
   WorktreeMcpService,
   {
+    readonly services: (
+      scope: McpInvocationScope,
+    ) => Effect.Effect<
+      WorktreeServicesSnapshot,
+      WorktreeMcpFailure,
+      WorktreeServices.WorktreeServices
+    >;
+    readonly controlServices: (
+      scope: McpInvocationScope,
+      input: Omit<WorktreeServiceControlInput, "threadId">,
+    ) => Effect.Effect<
+      WorktreeServicesSnapshot,
+      WorktreeMcpFailure,
+      WorktreeServices.WorktreeServices
+    >;
     readonly handoff: (
       scope: McpInvocationScope,
       input: WorktreeMcpHandoffInput,
@@ -492,7 +515,48 @@ const make = Effect.gen(function* () {
     },
   );
 
-  return WorktreeMcpService.of({ handoff, status });
+  const services = Effect.fn("WorktreeMcpService.services")(function* (
+    inputScope: McpInvocationScope,
+  ) {
+    const scope = yield* requireThreadScope(inputScope);
+    yield* requireCapability(scope);
+    const service = yield* WorktreeServices.WorktreeServices;
+    return yield* service
+      .list({ threadId: scope.thread.threadId })
+      .pipe(Effect.mapError(() => failure("operation_failed", "Could not read app services.")));
+  });
+  const controlServices = Effect.fn("WorktreeMcpService.controlServices")(function* (
+    inputScope: McpInvocationScope,
+    input: Omit<WorktreeServiceControlInput, "threadId">,
+  ) {
+    const scope = yield* requireThreadScope(inputScope);
+    yield* requireCapability(scope);
+    const authorize = Effect.gen(function* () {
+      const caller = yield* loadCaller();
+      yield* assertLiveCaller(caller);
+      yield* assertFullAccess(
+        caller,
+        "Controlling app services requires full-access/default mode.",
+      );
+    }).pipe(
+      Effect.provideService(Invocation.McpInvocationContext, scope),
+      Effect.provideService(ThreadManagementService.ThreadManagementService, threadManagement),
+      Effect.mapError((cause) => new WorktreeServicesError({ operation: "authorize", cause })),
+    );
+    const service = yield* WorktreeServices.WorktreeServices;
+    return yield* service
+      .control({ ...input, threadId: scope.thread.threadId }, authorize)
+      .pipe(
+        Effect.mapError((error) =>
+          failure(
+            error.operation === "authorize" ? "capability_denied" : "operation_failed",
+            error.message,
+          ),
+        ),
+      );
+  });
+
+  return WorktreeMcpService.of({ handoff, status, services, controlServices });
 });
 
 export const layer: Layer.Layer<

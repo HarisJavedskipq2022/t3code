@@ -1,3 +1,4 @@
+import { ThreadServicesPanel } from "./ThreadServicesPanel";
 import type {
   EditorId,
   EnvironmentId,
@@ -172,6 +173,9 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
             </ThreadDetailsSection>
           ) : null}
 
+          {!props.draftId ? (
+            <ThreadServicesPanel environmentId={props.environmentId} threadId={props.threadId} />
+          ) : null}
           {density === "full" && !props.draftId ? (
             <ThreadAutomationsPanel environmentId={props.environmentId} threadId={props.threadId} />
           ) : null}

@@ -1,4 +1,4 @@
-import { EnvironmentId } from "@t3tools/contracts";
+import { EnvironmentId, type ProjectScript } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import { AsyncResult } from "effect/reactivity";
 import { act, StrictMode, type ReactNode } from "react";
@@ -40,8 +40,10 @@ vi.mock("./ui/switch", () => ({ Switch: "input" }));
 vi.mock("./ui/textarea", () => ({ Textarea: "textarea" }));
 
 import {
+  editorRequestForScript,
   EMPTY_PROJECT_SCRIPT_INPUT,
   ProjectScriptEditorDialog,
+  type NewProjectScriptInput,
   type ProjectScriptActionResult,
   type ProjectScriptEditorRequest,
 } from "./projectScriptEditor";
@@ -247,5 +249,94 @@ describe("project action editor save lifecycle", () => {
       await completion;
     });
     expect(onClose).not.toHaveBeenCalled();
+  });
+});
+
+describe("project action editor services", () => {
+  function serviceRequest(initial: Partial<NewProjectScriptInput>): ProjectScriptEditorRequest {
+    return {
+      scriptId: "web",
+      initial: { ...EMPTY_PROJECT_SCRIPT_INPUT, name: "Web", command: "pnpm dev", ...initial },
+    };
+  }
+
+  function validationMessage(): unknown {
+    return renderer!.root.findByProps({ className: "text-sm text-destructive" }).props.children;
+  }
+
+  function toggleService(): void {
+    act(() => {
+      renderer!.root.findByProps({ id: "script-service" }).props.onCheckedChange(true);
+    });
+  }
+
+  function typeServicePort(value: string): void {
+    act(() => {
+      renderer!.root
+        .findByProps({ id: "script-service-port" })
+        .props.onChange({ target: { value } });
+    });
+  }
+
+  it("preserves service fields when opening the editor for a service action", () => {
+    const script: ProjectScript = {
+      id: "web",
+      name: "Web",
+      command: "pnpm dev",
+      icon: "play",
+      runOnWorktreeCreate: false,
+      service: true,
+      servicePort: 3000,
+    };
+    const opened = editorRequestForScript(script, []);
+    expect(opened.initial.service).toBe(true);
+    expect(opened.initial.servicePort).toBe(3000);
+  });
+
+  it("submits a service with its base port", async () => {
+    onSubmit.mockResolvedValue(AsyncResult.success(undefined));
+    open(serviceRequest({}));
+    toggleService();
+    typeServicePort("3000");
+    await act(async () => {
+      await submit();
+    });
+    expect(onSubmit).toHaveBeenCalledExactlyOnceWith(
+      "web",
+      expect.objectContaining({ service: true, servicePort: 3000 }),
+    );
+  });
+
+  it("keeps an ordinary action free of service configuration", async () => {
+    onSubmit.mockResolvedValue(AsyncResult.success(undefined));
+    open(request("test"));
+    await act(async () => {
+      await submit();
+    });
+    expect(onSubmit).toHaveBeenCalledExactlyOnceWith(
+      "test",
+      expect.objectContaining({ service: false, servicePort: null }),
+    );
+  });
+
+  it("rejects a service that also holds the setup or settle role", async () => {
+    onSubmit.mockResolvedValue(AsyncResult.success(undefined));
+    open(serviceRequest({ service: true, runOnSettle: true }));
+    await act(async () => {
+      await submit();
+    });
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(String(validationMessage())).toContain("can't also");
+  });
+
+  it("rejects a base port outside 1..65535", async () => {
+    onSubmit.mockResolvedValue(AsyncResult.success(undefined));
+    open(serviceRequest({ service: true, servicePort: 3000 }));
+    typeServicePort("70000");
+    await act(async () => {
+      await submit();
+    });
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(String(validationMessage())).toContain("between 1 and 65535");
   });
 });

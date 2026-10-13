@@ -414,6 +414,10 @@
     "./pull-request-markdown": {
       "types": "./src/pullRequestMarkdown.ts",
       "default": "./src/pullRequestMarkdown.ts"
+    },
+    "./state/worktreeServices": {
+      "types": "./src/state/worktreeServices.ts",
+      "default": "./src/state/worktreeServices.ts"
     }
   },
   "scripts": {

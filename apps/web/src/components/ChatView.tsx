@@ -1,3 +1,4 @@
+import { worktreeServicesEnvironment } from "../state/worktreeServices";
 import { ThreadFind, ThreadFindCanvas, type ThreadFindControls } from "./chat/ThreadFindProvider";
 import { THREAD_FIND_BAR_RESERVED_HEIGHT } from "./chat/ThreadFindBar";
 import { usageLimitRecoveryBannerItem } from "./chat/UsageLimitRecoveryBanner";
@@ -4984,6 +4985,9 @@ export default function ChatView(props: ChatViewProps) {
       writeTerminal,
     ],
   );
+  const controlService = useAtomCommand(worktreeServicesEnvironment.control, {
+    reportFailure: false,
+  });
   const runProjectScript = useCallback(
     async (
       script: ProjectScript,
@@ -5001,6 +5005,32 @@ export default function ChatView(props: ChatViewProps) {
           if (current[activeProject.id] === script.id) return current;
           return { ...current, [activeProject.id]: script.id };
         });
+      }
+      if (script.service) {
+        const result = await controlService({
+          environmentId,
+          input: { threadId: activeThreadId, scriptId: script.id, action: "start" },
+        });
+        if (result._tag === "Failure") {
+          if (!isAtomCommandInterrupted(result))
+            setThreadError(activeThreadId, "Could not start app service.");
+          return;
+        }
+        const row = result.value.services.find((row) => row.scriptId === script.id);
+        if (row?.error) setThreadError(activeThreadId, row.error);
+        if (
+          row?.status === "running" &&
+          script.autoOpenPreview &&
+          script.previewUrl &&
+          isPreviewSupportedInRuntime()
+        ) {
+          await openUrlInPreview({
+            threadRef: { environmentId, threadId: activeThreadId },
+            url: resolveDiscoveredServerUrl(environmentId, script.previewUrl),
+            openPreview,
+          });
+        }
+        return;
       }
       const targetCwd = options?.cwd ?? gitCwd ?? activeProject.workspaceRoot;
       const baseTerminalId =
@@ -5125,6 +5155,7 @@ export default function ChatView(props: ChatViewProps) {
       allocateTerminalId,
       runningTerminalIds,
       terminalUiState.activeTerminalId,
+      controlService,
       writeTerminal,
     ],
   );

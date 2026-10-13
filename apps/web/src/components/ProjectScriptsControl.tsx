@@ -16,7 +16,12 @@ import { projectScriptMenuLabel } from "@t3tools/shared/projectScripts";
 import { ChevronDownIcon, DownloadIcon, PlusIcon, SettingsIcon, WrenchIcon } from "lucide-react";
 import React, { useCallback, useMemo, useState } from "react";
 
-import { commandForProjectScript, primaryProjectScript } from "~/projectScripts";
+import {
+  commandForProjectScript,
+  primaryProjectScript,
+  projectScriptInputFromFileScript,
+  projectScriptServiceConflict,
+} from "~/projectScripts";
 import { shortcutLabelForCommand } from "~/keybindings";
 import { serverEnvironment } from "~/state/server";
 import { readEnvironmentScope } from "~/state/session";
@@ -144,16 +149,14 @@ export default function ProjectScriptsControl({
 
   const importFileScript = async (fileScript: T3ProjectFileScript) => {
     const payload: NewProjectScriptInput = {
-      name: fileScript.name,
-      command: fileScript.command,
-      icon: fileScript.icon ?? "play",
-      runOnWorktreeCreate: fileScript.runOnWorktreeCreate ?? false,
-      waitForSetup: fileScript.runOnWorktreeCreate === true && fileScript.async === false,
-      runOnSettle: fileScript.runOnSettle ?? false,
+      ...projectScriptInputFromFileScript(fileScript),
       ...(readEnvironmentScope(environmentId, AuthSettingsWriteScope) ? { keybinding: null } : {}),
-      previewUrl: fileScript.previewUrl ?? null,
-      autoOpenPreview: fileScript.previewUrl ? (fileScript.autoOpenPreview ?? false) : false,
     };
+    const conflict = projectScriptServiceConflict(payload);
+    if (conflict) {
+      setEditorRequest({ scriptId: null, initial: payload, error: conflict });
+      return;
+    }
     const result = await onAddScript(payload);
     if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
       // Surface the failure through the regular add dialog, prefilled so the

@@ -57,6 +57,35 @@ describe("T3ProjectFile", () => {
     ).toThrow();
   });
 
+  it("decodes a marked service and rejects an invalid base port", () => {
+    const decoded = decode({
+      scripts: [
+        {
+          name: "Dev",
+          command: "pnpm dev",
+          icon: "play",
+          service: true,
+          servicePort: 5733,
+        },
+      ],
+    });
+    expect(decoded.scripts?.[0]).toEqual({
+      name: "Dev",
+      command: "pnpm dev",
+      icon: "play",
+      service: true,
+      servicePort: 5733,
+    });
+    expect(decode({ scripts: [{ name: "Dev", command: "pnpm dev", service: true }] })).toEqual({
+      scripts: [{ name: "Dev", command: "pnpm dev", service: true }],
+    });
+    for (const servicePort of [0, -1, 65536, 3000.5]) {
+      expect(() =>
+        decode({ scripts: [{ name: "Dev", command: "pnpm dev", service: true, servicePort }] }),
+      ).toThrow();
+    }
+  });
+
   it("decodes defaultThreadEnvMode and rejects unknown modes", () => {
     expect(decode({ defaultThreadEnvMode: "worktree" }).defaultThreadEnvMode).toBe("worktree");
     expect(decode({ defaultThreadEnvMode: "local" }).defaultThreadEnvMode).toBe("local");

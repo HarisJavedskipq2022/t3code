@@ -8,6 +8,7 @@ import {
   isUnknownUnionMember,
   IsoDateTime,
   NonNegativeInt,
+  PortSchema,
   PositiveInt,
   ProjectId,
   TrimmedNonEmptyString,
@@ -42,6 +43,14 @@ export const ProjectScript = Schema.Struct({
   async: Schema.optional(Schema.Boolean),
   previewUrl: Schema.optional(TrimmedNonEmptyString),
   autoOpenPreview: Schema.optional(Schema.Boolean),
+  /** A long-running action shown in the worktree services panel. Omitted or false is an ordinary action. */
+  service: Schema.optional(Schema.Boolean),
+  /**
+   * Base port for a service. The runtime adds the checkout's
+   * `projectScriptPortOffset` and exposes the result as PORT and
+   * T3CODE_SERVICE_PORT. Omitted means the service configures no port.
+   */
+  servicePort: Schema.optional(PortSchema),
 });
 export type ProjectScript = typeof ProjectScript.Type;
 

@@ -1,4 +1,10 @@
 import {
+  WorktreeServicesInput,
+  WorktreeServiceControlInput,
+  WorktreeServicesSnapshot,
+  WorktreeServicesError,
+} from "./worktreeServices.ts";
+import {
   OrchestrationV2SearchThreadError,
   OrchestrationV2SearchThreadInput,
   OrchestrationV2SearchThreadResult,
@@ -440,6 +446,8 @@ export const WS_METHODS = {
   reviewGetDiffFileContents: "review.getDiffFileContents",
 
   // Terminal methods
+  worktreeServicesWatch: "worktreeServices.watch",
+  worktreeServicesControl: "worktreeServices.control",
   terminalOpen: "terminal.open",
   terminalAttach: "terminal.attach",
   terminalObserve: "terminal.observe",
@@ -1447,6 +1455,18 @@ const WsReviewGetDiffFileContentsRpc = Rpc.make(WS_METHODS.reviewGetDiffFileCont
   error: Schema.Union([ReviewDiffPreviewError, EnvironmentAuthorizationError]),
 });
 
+const WsWorktreeServicesWatchRpc = Rpc.make(WS_METHODS.worktreeServicesWatch, {
+  payload: WorktreeServicesInput,
+  success: WorktreeServicesSnapshot,
+  error: Schema.Union([WorktreeServicesError, EnvironmentAuthorizationError]),
+  stream: true,
+});
+const WsWorktreeServicesControlRpc = Rpc.make(WS_METHODS.worktreeServicesControl, {
+  payload: WorktreeServiceControlInput,
+  success: WorktreeServicesSnapshot,
+  error: Schema.Union([WorktreeServicesError, EnvironmentAuthorizationError]),
+});
+
 const WsTerminalOpenRpc = Rpc.make(WS_METHODS.terminalOpen, {
   payload: TerminalOpenInput,
   success: TerminalSessionSnapshot,
@@ -1876,6 +1896,8 @@ export class RpcScopeAuthorization extends RpcMiddleware.Service<RpcScopeAuthori
 ) {}
 
 export const WsRpcGroup = RpcGroup.make(
+  WsWorktreeServicesWatchRpc,
+  WsWorktreeServicesControlRpc,
   WsServerProbeRpc,
   WsServerGetConfigRpc,
   WsServerRefreshProvidersRpc,

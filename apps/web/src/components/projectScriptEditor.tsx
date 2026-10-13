@@ -33,7 +33,11 @@ import {
   decodeProjectScriptKeybindingRule,
 } from "~/lib/projectScriptKeybindings";
 import { keybindingFromKeyboardEvent } from "~/components/settings/KeybindingsSettings.logic";
-import { commandForProjectScript, nextProjectScriptId } from "~/projectScripts";
+import {
+  commandForProjectScript,
+  nextProjectScriptId,
+  projectScriptServiceConflict,
+} from "~/projectScripts";
 import { readEnvironmentScope, useEnvironmentScope } from "~/state/session";
 import { useComposerMenuState } from "./chat/useComposerMenuState";
 import {
@@ -99,6 +103,10 @@ export interface NewProjectScriptInput {
   previewUrl: string | null;
   /** When true, automatically open the preview panel pointed at `previewUrl`. */
   autoOpenPreview: boolean;
+  /** Marks the action as a long-running app service. Defaults to false. */
+  service?: boolean;
+  /** Base port for the service; the worktree offset is added at runtime. */
+  servicePort?: number | null;
 }
 
 export type ProjectScriptActionResult = AtomCommandResult<void, unknown>;
@@ -113,6 +121,8 @@ export const EMPTY_PROJECT_SCRIPT_INPUT: NewProjectScriptInput = {
   keybinding: null,
   previewUrl: null,
   autoOpenPreview: false,
+  service: false,
+  servicePort: null,
 };
 
 /** What the editor dialog should open with. `scriptId: null` means "add". */
@@ -139,6 +149,8 @@ export function editorRequestForScript(
       keybinding: keybindingValueForCommand(keybindings, commandForProjectScript(script.id)),
       previewUrl: script.previewUrl ?? null,
       autoOpenPreview: script.autoOpenPreview ?? false,
+      service: script.service ?? false,
+      servicePort: script.servicePort ?? null,
     },
   };
 }
@@ -182,6 +194,8 @@ export function ProjectScriptEditorDialog({
   const [keybinding, setKeybinding] = useState("");
   const [previewUrl, setPreviewUrl] = useState("");
   const [autoOpenPreview, setAutoOpenPreview] = useState(false);
+  const [service, setService] = useState(false);
+  const [servicePortInput, setServicePortInput] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useComposerMenuState(!canEditActions);
   const [savingRequest, setSavingRequest] = useState<ProjectScriptEditorRequest | null>(null);
@@ -214,6 +228,10 @@ export function ProjectScriptEditorDialog({
     setKeybinding(request.initial.keybinding ?? "");
     setPreviewUrl(request.initial.previewUrl ?? "");
     setAutoOpenPreview(request.initial.autoOpenPreview);
+    setService(request.initial.service ?? false);
+    setServicePortInput(
+      request.initial.servicePort == null ? "" : String(request.initial.servicePort),
+    );
     setValidationError(request.error ?? null);
     setSavingRequest(null);
   }, [request, setIconPickerOpen]);
@@ -263,6 +281,29 @@ export function ProjectScriptEditorDialog({
       setValidationError("Command is required.");
       return;
     }
+    const serviceConflict = projectScriptServiceConflict({
+      service,
+      runOnWorktreeCreate,
+      runOnSettle,
+    });
+    if (serviceConflict) {
+      setValidationError(serviceConflict);
+      return;
+    }
+    const trimmedServicePort = servicePortInput.trim();
+    let servicePort: number | null = null;
+    if (service && trimmedServicePort.length > 0) {
+      const parsedServicePort = Number(trimmedServicePort);
+      if (
+        !Number.isInteger(parsedServicePort) ||
+        parsedServicePort < 1 ||
+        parsedServicePort > 65535
+      ) {
+        setValidationError("Base port must be a whole number between 1 and 65535.");
+        return;
+      }
+      servicePort = parsedServicePort;
+    }
 
     setValidationError(null);
     let payload: NewProjectScriptInput;
@@ -290,6 +331,8 @@ export function ProjectScriptEditorDialog({
           : {}),
         previewUrl: trimmedPreviewUrl.length > 0 ? trimmedPreviewUrl : null,
         autoOpenPreview: trimmedPreviewUrl.length > 0 ? autoOpenPreview : false,
+        service,
+        servicePort,
       } satisfies NewProjectScriptInput;
     } catch (error) {
       setValidationError(error instanceof Error ? error.message : "Failed to save action.");
@@ -468,6 +511,34 @@ export function ProjectScriptEditorDialog({
                     onCheckedChange={(checked) => setAutoOpenPreview(Boolean(checked))}
                   />
                 </label>
+                <div className="space-y-1.5 rounded-md border border-border/70 px-3 py-2 dark:border-transparent dark:bg-white/[0.035]">
+                  <label className="flex items-center justify-between gap-3 text-sm">
+                    <span>App service</span>
+                    <Switch
+                      id="script-service"
+                      checked={service}
+                      onCheckedChange={(checked) => setService(Boolean(checked))}
+                    />
+                  </label>
+                  <p className="text-xs text-muted-foreground">
+                    Starts with the worktree's services in its own terminal, not as an ordinary
+                    action. T3 Code adds this checkout's port offset to the base port and passes the
+                    result as <code>PORT</code> and <code>T3CODE_SERVICE_PORT</code>; the command
+                    must read one of them.
+                  </p>
+                </div>
+                {service ? (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="script-service-port">Base port (optional)</Label>
+                    <Input
+                      id="script-service-port"
+                      inputMode="numeric"
+                      placeholder="3000"
+                      value={servicePortInput}
+                      onChange={(event) => setServicePortInput(event.target.value)}
+                    />
+                  </div>
+                ) : null}
                 {validationError && <p className="text-sm text-destructive">{validationError}</p>}
               </fieldset>
             </form>

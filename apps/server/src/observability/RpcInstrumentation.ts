@@ -173,6 +173,8 @@ const RPC_AGGREGATES = {
   [WS_METHODS.vcsInit]: "vcs",
   [WS_METHODS.reviewGetDiffPreview]: "review",
   [WS_METHODS.reviewGetDiffFileContents]: "review",
+  [WS_METHODS.worktreeServicesWatch]: "worktreeServices",
+  [WS_METHODS.worktreeServicesControl]: "worktreeServices",
   [WS_METHODS.terminalOpen]: "terminal",
   [WS_METHODS.terminalAttach]: "terminal",
   [WS_METHODS.terminalObserve]: "terminal",

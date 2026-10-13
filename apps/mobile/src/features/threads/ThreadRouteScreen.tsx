@@ -1,3 +1,5 @@
+import { ThreadServicesControl } from "./ThreadServicesControl";
+import { worktreeServicesEnvironment } from "../../state/worktreeServices";
 import { useOpenPullRequest } from "../../native/useOpenPullRequest";
 import { makeTurnCommandMetadata } from "../../lib/commandMetadata";
 import { buildProjectThreadStartTurnInput } from "../../lib/projectThreadStartTurn";
@@ -707,6 +709,9 @@ function ThreadRouteContent(
     terminalMenuSessions,
   ]);
 
+  const controlService = useAtomCommand(worktreeServicesEnvironment.control, {
+    reportFailure: false,
+  });
   const handleRunProjectScript = useCallback(
     async (script: ProjectScript) => {
       terminalDebugLog("project-script:press", {
@@ -728,6 +733,19 @@ function ThreadRouteContent(
         return;
       }
 
+      if (script.service) {
+        const result = await controlService({
+          environmentId: selectedThread.environmentId,
+          input: { threadId: selectedThread.id, scriptId: script.id, action: "start" },
+        });
+        if (result._tag === "Failure") {
+          Alert.alert("App service", "Could not start the app service.");
+        } else {
+          const row = result.value.services.find((row) => row.scriptId === script.id);
+          if (row?.error) Alert.alert("App service", row.error);
+        }
+        return;
+      }
       const targetTerminalId = resolveProjectScriptTerminalId({
         existingTerminalIds: terminalMenuSessions.map((session) => session.terminalId),
         ...(knownTerminalSessions === null ||
@@ -777,6 +795,7 @@ function ThreadRouteContent(
       });
     },
     [
+      controlService,
       navigation,
       selectedThread,
       selectedThreadDetailWorktreePath,
@@ -1099,6 +1118,11 @@ function ThreadRouteContent(
         onReturnToThread={props.onReturnToThread}
       />
 
+      <ThreadServicesControl
+        environmentId={selectedThread.environmentId}
+        threadId={selectedThread.id}
+        serverBrowser={serverConfig?.environment.capabilities.serverBrowser === true}
+      />
       {renderThreadRouteBody()}
     </>
   );

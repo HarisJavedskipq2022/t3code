@@ -15,6 +15,8 @@ import {
   nextProjectScriptId,
   primaryProjectScript,
   projectScriptIdFromCommand,
+  projectScriptInputFromFileScript,
+  projectScriptServiceConflict,
   releaseClaimedRoles,
 } from "./projectScripts";
 
@@ -243,5 +245,108 @@ describe("projectScripts helpers", () => {
         worktreePath: null,
       }),
     ).toBe("/repo");
+  });
+});
+
+describe("project script services", () => {
+  const base = {
+    name: "Dev",
+    command: "pnpm dev",
+    icon: "play",
+    runOnWorktreeCreate: false,
+    waitForSetup: false,
+    runOnSettle: false,
+    previewUrl: null,
+    autoOpenPreview: false,
+  } as const;
+
+  it("omits service fields for an ordinary action", () => {
+    expect(buildProjectScript("dev", base)).toEqual({
+      id: "dev",
+      name: "Dev",
+      command: "pnpm dev",
+      icon: "play",
+      runOnWorktreeCreate: false,
+    });
+  });
+
+  it("marks a service with its base port", () => {
+    expect(buildProjectScript("dev", { ...base, service: true, servicePort: 3000 })).toMatchObject({
+      service: true,
+      servicePort: 3000,
+    });
+  });
+
+  it("marks a service that configures no port", () => {
+    const script = buildProjectScript("dev", { ...base, service: true, servicePort: null });
+    expect(script.service).toBe(true);
+    expect(script).not.toHaveProperty("servicePort");
+  });
+
+  it("drops a base port when the action is not a service", () => {
+    const script = buildProjectScript("dev", { ...base, service: false, servicePort: 3000 });
+    expect(script).not.toHaveProperty("service");
+    expect(script).not.toHaveProperty("servicePort");
+  });
+
+  it("rejects combining a service with the setup or settle role", () => {
+    expect(projectScriptServiceConflict({ service: false, runOnSettle: true })).toBeNull();
+    expect(projectScriptServiceConflict({ service: true })).toBeNull();
+    expect(projectScriptServiceConflict({ service: true, runOnWorktreeCreate: true })).toContain(
+      "setup action",
+    );
+    expect(projectScriptServiceConflict({ service: true, runOnSettle: true })).toContain(
+      "settle action",
+    );
+    expect(
+      projectScriptServiceConflict({ service: true, runOnWorktreeCreate: true, runOnSettle: true }),
+    ).toContain("setup and settle");
+  });
+
+  it("preserves service fields when importing a t3.json action", () => {
+    expect(
+      projectScriptInputFromFileScript({
+        name: "Web",
+        command: "pnpm dev",
+        service: true,
+        servicePort: 5733,
+      }),
+    ).toEqual({
+      name: "Web",
+      command: "pnpm dev",
+      icon: "play",
+      runOnWorktreeCreate: false,
+      waitForSetup: false,
+      runOnSettle: false,
+      service: true,
+      servicePort: 5733,
+      previewUrl: null,
+      autoOpenPreview: false,
+    });
+  });
+
+  it("preserves ordinary fields when importing a plain t3.json action", () => {
+    expect(
+      projectScriptInputFromFileScript({
+        name: "Test",
+        command: "vp test",
+        icon: "test",
+        runOnWorktreeCreate: true,
+        async: false,
+        previewUrl: "http://localhost:5173",
+        autoOpenPreview: true,
+      }),
+    ).toEqual({
+      name: "Test",
+      command: "vp test",
+      icon: "test",
+      runOnWorktreeCreate: true,
+      waitForSetup: true,
+      runOnSettle: false,
+      service: false,
+      servicePort: null,
+      previewUrl: "http://localhost:5173",
+      autoOpenPreview: true,
+    });
   });
 });
