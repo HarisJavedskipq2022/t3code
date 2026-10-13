@@ -31,6 +31,10 @@
       "types": "./src/themePalettes.ts",
       "import": "./src/themePalettes.ts"
     },
+    "./forkThemes": {
+      "types": "./src/forkThemes.ts",
+      "import": "./src/forkThemes.ts"
+    },
     "./themePreview": {
       "types": "./src/themePreview.ts",
       "import": "./src/themePreview.ts"

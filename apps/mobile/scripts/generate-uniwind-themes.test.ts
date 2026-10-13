@@ -1,5 +1,6 @@
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
+import { FORK_THEME_IDS } from "@t3tools/shared/forkThemes";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -37,6 +38,7 @@ describe("generate mobile Uniwind themes", () => {
       "ember-dark",
       "iris-light",
       "iris-dark",
+      ...FORK_THEME_IDS.flatMap((id) => [`${id}-light`, `${id}-dark`]),
     ]);
 
     const stylesheet = renderUniwindThemesCSS();

@@ -1,0 +1,102 @@
+/* Stage artwork for the fork's built-in themes (packages/shared/src/forkThemes.ts).
+   Each theme names three signature colors from its own palette; the shared
+   rules below keep their hue and chroma but pin lightness to the levels the
+   maintainer palettes use, so the white stage wordmark keeps its contrast. */
+@layer components {
+  html[data-theme-id="fork-catppuccin"] {
+    --fork-art-a: #8839ef;
+    --fork-art-b: #ea76cb;
+    --fork-art-c: #1e66f5;
+  }
+  html[data-theme-id="fork-rose-pine"] {
+    --fork-art-a: #907aa9;
+    --fork-art-b: #d7827e;
+    --fork-art-c: #56949f;
+  }
+  html[data-theme-id="fork-tokyo-night"] {
+    --fork-art-a: #7aa2f7;
+    --fork-art-b: #bb9af7;
+    --fork-art-c: #7dcfff;
+  }
+  html[data-theme-id="fork-gruvbox"] {
+    --fork-art-a: #d65d0e;
+    --fork-art-b: #d79921;
+    --fork-art-c: #689d6a;
+  }
+  html[data-theme-id="fork-solarized"] {
+    --fork-art-a: #268bd2;
+    --fork-art-b: #2aa198;
+    --fork-art-c: #6c71c4;
+  }
+  html[data-theme-id="fork-everforest"] {
+    --fork-art-a: #8da101;
+    --fork-art-b: #35a77c;
+    --fork-art-c: #dfa000;
+  }
+  html[data-theme-id="fork-kanagawa"] {
+    --fork-art-a: #7e9cd8;
+    --fork-art-b: #d27e99;
+    --fork-art-c: #7fb4ca;
+  }
+  html[data-theme-id="fork-github"] {
+    --fork-art-a: #1f6feb;
+    --fork-art-b: #a371f7;
+    --fork-art-c: #db61a2;
+  }
+  html[data-theme-id="fork-one"] {
+    --fork-art-a: #4078f2;
+    --fork-art-b: #a626a4;
+    --fork-art-c: #0184bc;
+  }
+  html[data-theme-id="fork-nord"] {
+    --fork-art-a: #5e81ac;
+    --fork-art-b: #88c0d0;
+    --fork-art-c: #b48ead;
+  }
+  html[data-theme-id="fork-dracula"] {
+    --fork-art-a: #bd93f9;
+    --fork-art-b: #ff79c6;
+    --fork-art-c: #8be9fd;
+  }
+
+  html[data-theme-id^="fork-"] {
+    --stage-art-top: oklch(from var(--fork-art-a) 0.76 min(c, 0.15) h);
+    --stage-art-mid: oklch(from var(--fork-art-a) 0.58 min(c, 0.17) h);
+    --stage-art-bottom: oklch(from var(--fork-art-a) 0.39 min(c, 0.13) h);
+    --stage-art-highlight: oklch(from var(--fork-art-b) 0.95 min(c, 0.04) h);
+    --stage-art-secondary: oklch(from var(--fork-art-b) 0.78 min(c, 0.15) h);
+    --stage-art-tertiary: oklch(from var(--fork-art-c) 0.72 min(c, 0.17) h);
+    --stage-art-line: oklch(from var(--fork-art-b) 0.96 min(c, 0.03) h);
+    --stage-night-top: oklch(from var(--fork-art-a) 0.46 min(c, 0.1) h);
+    --stage-night-mid: oklch(from var(--fork-art-a) 0.36 min(c, 0.08) h);
+    --stage-night-bottom: oklch(from var(--fork-art-a) 0.25 min(c, 0.055) h);
+    --stage-night-highlight: oklch(from var(--fork-art-b) 0.9 min(c, 0.06) h);
+    --stage-night-secondary: oklch(from var(--fork-art-b) 0.65 min(c, 0.12) h);
+    --stage-night-tertiary: oklch(from var(--fork-art-c) 0.62 min(c, 0.13) h);
+    --stage-night-line: oklch(from var(--fork-art-b) 0.94 min(c, 0.045) h);
+    --stage-art-celeste-highlight: var(--stage-art-highlight);
+    --stage-art-celeste-secondary: var(--stage-art-secondary);
+    --stage-art-violet-highlight: var(--stage-art-highlight);
+    --stage-art-grid-line: var(--stage-art-line);
+    --stage-night-glow-highlight: var(--stage-night-highlight);
+    --stage-night-glow-secondary: var(--stage-night-secondary);
+    --stage-night-sparkle: var(--stage-night-line);
+  }
+
+  html.dark[data-theme-id^="fork-"] {
+    --stage-art-top: oklch(from var(--fork-art-a) 0.56 min(c, 0.14) h);
+    --stage-art-mid: oklch(from var(--fork-art-a) 0.43 min(c, 0.13) h);
+    --stage-art-bottom: oklch(from var(--fork-art-a) 0.27 min(c, 0.09) h);
+    --stage-art-highlight: oklch(from var(--fork-art-b) 0.92 min(c, 0.05) h);
+    --stage-art-secondary: oklch(from var(--fork-art-b) 0.68 min(c, 0.14) h);
+    --stage-art-tertiary: oklch(from var(--fork-art-c) 0.64 min(c, 0.16) h);
+    --stage-art-line: oklch(from var(--fork-art-b) 0.945 min(c, 0.035) h);
+    --stage-night-top: oklch(from var(--fork-art-a) 0.4 min(c, 0.08) h);
+    --stage-night-mid: oklch(from var(--fork-art-a) 0.29 min(c, 0.06) h);
+    --stage-night-bottom: oklch(from var(--fork-art-a) 0.2 min(c, 0.035) h);
+    --stage-night-highlight: oklch(from var(--fork-art-b) 0.86 min(c, 0.06) h);
+    --stage-night-secondary: oklch(from var(--fork-art-b) 0.58 min(c, 0.1) h);
+    --stage-night-tertiary: oklch(from var(--fork-art-c) 0.56 min(c, 0.11) h);
+    --stage-night-line: oklch(from var(--fork-art-b) 0.9 min(c, 0.04) h);
+  }
+}

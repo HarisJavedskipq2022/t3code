@@ -1,4 +1,13 @@
-export const BUILT_IN_THEME_IDS = ["t3-chat", "grove", "ocean", "ember", "iris"] as const;
+import { FORK_THEME_IDS, FORK_THEMES } from "./forkThemes.ts";
+
+export const BUILT_IN_THEME_IDS = [
+  "t3-chat",
+  "grove",
+  "ocean",
+  "ember",
+  "iris",
+  ...FORK_THEME_IDS,
+] as const;
 
 /** The standard T3 Code palette, kept separate from the optional built-in theme library. */
 export const MOBILE_DEFAULT_THEME_ID = "t3-code";
@@ -943,6 +952,7 @@ export const BUILT_IN_THEMES: ReadonlyArray<ThemeDefinition> = [
   OCEAN_THEME,
   EMBER_THEME,
   IRIS_THEME,
+  ...FORK_THEMES,
 ];
 
 export function getThemeColorsForAppearance(

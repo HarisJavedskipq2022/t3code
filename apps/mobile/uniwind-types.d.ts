@@ -3,7 +3,7 @@
 
 declare module 'uniwind' {
     export interface UniwindConfig {
-        themes: readonly ['light', 'dark', 't3-chat-light', 't3-chat-dark', 'grove-light', 'grove-dark', 'ocean-light', 'ocean-dark', 'ember-light', 'ember-dark', 'iris-light', 'iris-dark']
+        themes: readonly ['light', 'dark', 't3-chat-light', 't3-chat-dark', 'grove-light', 'grove-dark', 'ocean-light', 'ocean-dark', 'ember-light', 'ember-dark', 'iris-light', 'iris-dark', 'fork-catppuccin-light', 'fork-catppuccin-dark', 'fork-rose-pine-light', 'fork-rose-pine-dark', 'fork-tokyo-night-light', 'fork-tokyo-night-dark', 'fork-gruvbox-light', 'fork-gruvbox-dark', 'fork-solarized-light', 'fork-solarized-dark', 'fork-everforest-light', 'fork-everforest-dark', 'fork-kanagawa-light', 'fork-kanagawa-dark', 'fork-github-light', 'fork-github-dark', 'fork-one-light', 'fork-one-dark', 'fork-nord-light', 'fork-nord-dark', 'fork-dracula-light', 'fork-dracula-dark']
     }
 }
 
