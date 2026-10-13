@@ -445,7 +445,9 @@ function makeLocalCommandHarness(input: {
     (input: RunExecutionService.RunExecutionServiceV2StartRootRunInput) => Effect.Effect<void>
   >((runInput) =>
     input.fusion !== undefined
-      ? runInput.session.startTurn({ message: runInput.message } as never).pipe(Effect.asVoid)
+      ? runInput.session
+          .startTurn({ message: runInput.message } as never)
+          .pipe(Effect.asVoid, Effect.orDie)
       : input.failReadsAfterRunning === true
         ? Effect.void
         : Effect.die("A local command must not start a native turn."),
