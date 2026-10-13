@@ -16,6 +16,7 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_NAME="T3 Code Fork"
 APP_PATH="/Applications/$APP_NAME.app"
 LOG="$HOME/.t3code-fork/sync.log"
+WAITER_PID="$HOME/.t3code-fork/install-waiter.pid"
 MONITOR="native/resource-monitor/target/aarch64-apple-darwin/release/t3-resource-monitor"
 
 NODE_BIN="$(ls -d "$HOME"/.nvm/versions/node/v24.*/bin 2>/dev/null | sort -V | tail -1)"
@@ -34,17 +35,33 @@ fail() {
   exit 1
 }
 
+# A waiter left by an earlier run would reinstall and reopen the app on the
+# next quit, so a new waiter or a manual install replaces it.
+cancel_pending_install() {
+  local pid
+  pid="$(cat "$WAITER_PID" 2>/dev/null)" || return 0
+  rm -f "$WAITER_PID"
+  # The waiter runs `--install` itself once the app is gone.
+  [ "$pid" = "$PPID" ] && return 0
+  # Only signal the PID while it is still that waiter, never a reused one.
+  if ps -o command= -p "$pid" 2>/dev/null | grep -qF -- "--install && sleep 2"; then
+    kill "$pid" 2>/dev/null || true
+  fi
+}
+
 install_latest() {
   local dmg mount
   dmg="$(ls -t "$REPO"/release/*-arm64.dmg 2>/dev/null | head -1)"
   [ -n "$dmg" ] || fail "no built DMG in release/"
+  cancel_pending_install
   if pgrep -f "$APP_PATH/Contents/MacOS/" >/dev/null; then
     # Run from the app's own terminal, so wait in a new session that outlives
     # the app, then install and reopen it once the user quits.
-    python3 -c 'import subprocess, sys; subprocess.Popen(sys.argv[1:], start_new_session=True,
-      stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)' \
+    python3 -c 'import subprocess, sys; print(subprocess.Popen(sys.argv[1:], start_new_session=True,
+      stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).pid)' \
       /bin/bash -c 'while pgrep -f "$0/Contents/MacOS/" >/dev/null; do sleep 2; done
-        "$1" --install && sleep 2 && open "$0"' "$APP_PATH" "$REPO/scripts/fork-sync.sh"
+        "$1" --install && sleep 2 && open "$0"' "$APP_PATH" "$REPO/scripts/fork-sync.sh" \
+      >"$WAITER_PID"
     notify "Update built. Quit $APP_NAME (Cmd-Q); it installs and reopens on its own."
     return 0
   fi
