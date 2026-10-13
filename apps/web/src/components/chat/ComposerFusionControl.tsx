@@ -90,8 +90,9 @@ export const ComposerFusionControl = memo(function ComposerFusionControl(props: 
         }
       >
         <ComposerControlIcon icon={CombineIcon} size={props.size} />
-        <span data-composer-control-label className="sr-only max-w-32 truncate sm:not-sr-only">
-          {sidekickName}
+        {/* not-sr-only resets wrapping, so the inner span does the truncating. */}
+        <span data-composer-control-label className="sr-only sm:not-sr-only">
+          <span className="block max-w-32 truncate">{sidekickName}</span>
         </span>
         <ComposerControlChevron size={props.size} />
       </PopoverTrigger>
