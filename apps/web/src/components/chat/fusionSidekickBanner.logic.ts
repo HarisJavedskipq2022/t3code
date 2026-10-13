@@ -7,6 +7,7 @@ import type {
   OrchestrationV2Subagent,
   ThreadId,
 } from "@t3tools/contracts";
+import * as DateTime from "effect/DateTime";
 
 export type FusionSidekickActivity = Readonly<{
   kind: "working" | "finished" | "stopped";
@@ -91,6 +92,28 @@ export function describeSidekickStep(
       default:
         continue;
     }
+  }
+  return null;
+}
+
+/** A sidekick command running this long is flagged as possibly stuck. */
+export const SIDEKICK_STALL_MINUTES = 3;
+
+/**
+ * Whole minutes the sidekick's newest step has been running, when that step
+ * is a command still running; null otherwise.
+ */
+export function runningSidekickCommandMinutes(
+  items: ReadonlyArray<Pick<OrchestrationV2ProjectedTurnItem, "visibility" | "item">>,
+  nowMs: number,
+): number | null {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const { item, visibility } = items[index]!;
+    if (visibility !== "local") continue;
+    if (item.type !== "command_execution" || item.status !== "running" || !item.startedAt) {
+      return null;
+    }
+    return Math.max(0, Math.floor((nowMs - DateTime.toEpochMillis(item.startedAt)) / 60_000));
   }
   return null;
 }

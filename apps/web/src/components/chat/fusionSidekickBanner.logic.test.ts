@@ -6,7 +6,13 @@ import {
 } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { describeSidekickStep, resolveFusionSidekickActivity } from "./fusionSidekickBanner.logic";
+import * as DateTime from "effect/DateTime";
+
+import {
+  describeSidekickStep,
+  resolveFusionSidekickActivity,
+  runningSidekickCommandMinutes,
+} from "./fusionSidekickBanner.logic";
 
 const sidekick = { childThreadId: ThreadId.make("thread-sidekick"), status: "idle" } as const;
 const leadActivityStartedAt = "2026-10-13T10:00:00.000Z";
@@ -155,5 +161,37 @@ describe("describeSidekickStep", () => {
   it("says nothing before the sidekick starts on the newest request", () => {
     expect(describeSidekickStep([row({ type: "user_message", text: "Add a test" })])).toBeNull();
     expect(describeSidekickStep([])).toBeNull();
+  });
+});
+
+describe("runningSidekickCommandMinutes", () => {
+  const startedAt = DateTime.makeUnsafe("2026-10-13T10:00:00.000Z");
+  const now = Date.parse("2026-10-13T10:04:30.000Z");
+
+  it("counts whole minutes for the sidekick's newest command while it runs", () => {
+    expect(
+      runningSidekickCommandMinutes(
+        [row({ type: "command_execution", status: "running", input: "vp test run", startedAt })],
+        now,
+      ),
+    ).toBe(4);
+  });
+
+  it("is null once the newest step is anything but a running command", () => {
+    const finished = row({ type: "command_execution", status: "completed", startedAt });
+    const thinking = row({ type: "reasoning", status: "running", startedAt });
+    expect(runningSidekickCommandMinutes([finished], now)).toBeNull();
+    expect(
+      runningSidekickCommandMinutes(
+        [row({ type: "command_execution", status: "running", startedAt }), thinking],
+        now,
+      ),
+    ).toBeNull();
+    expect(
+      runningSidekickCommandMinutes(
+        [row({ type: "command_execution", status: "running", startedAt }, "inherited")],
+        now,
+      ),
+    ).toBeNull();
   });
 });
