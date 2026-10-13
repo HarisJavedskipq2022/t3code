@@ -150,6 +150,40 @@ export function isTemporaryWorktreeBranch(refName: string): boolean {
   return TEMP_WORKTREE_BRANCH_PATTERN.test(refName.trim().toLowerCase());
 }
 
+// Filler that would crowd a folder name without saying what the work is.
+const FOLDER_NAME_FILLER = new Set(
+  "a an and are as be can could for from hey i in is it its let lets me my of on or our please so that the this to us we with would you your".split(
+    " ",
+  ),
+);
+
+/**
+ * A readable folder for a worktree on a temporary branch: the request's first
+ * few meaningful words plus the branch's random token, which keeps it unique,
+ * e.g. `fix-login-timeout-3f2a9c1d`. The branch is renamed later in the
+ * background, but a folder cannot move once work runs in it. Null when the
+ * request has no usable words.
+ */
+export function readableWorktreeFolderName(
+  request: string,
+  temporaryBranch: string,
+): string | null {
+  const words = (
+    request
+      .slice(0, 400)
+      .toLowerCase()
+      .match(/[a-z0-9]+/g) ?? []
+  ).filter((word) => !FOLDER_NAME_FILLER.has(word));
+  let slug = "";
+  for (const word of words.slice(0, 6)) {
+    if (slug.length + word.length + 1 > 40) break;
+    slug = slug ? `${slug}-${word}` : word;
+  }
+  if (!slug) return null;
+  const token = temporaryBranch.slice(temporaryBranch.search(/[-/]/) + 1);
+  return `${slug}-${token}`;
+}
+
 /**
  * The web spelling of an Azure DevOps repository reached over SSH, or null for anything else.
  *

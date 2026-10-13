@@ -33,6 +33,7 @@ import {
   buildTemporaryWorktreeBranchName,
   flattenTemporaryWorktreeBranchName,
   isTemporaryWorktreeBranch,
+  readableWorktreeFolderName,
   WORKTREE_BRANCH_PREFIX,
 } from "@t3tools/shared/git";
 
@@ -451,6 +452,12 @@ const make = Effect.gen(function* () {
           branch = flattenTemporaryWorktreeBranchName(branch);
         }
         yield* setupTracker.stageStatus(threadId, "checkout", "running");
+        // A temporary branch is renamed later, but its folder cannot move once
+        // work runs there, so name the folder after the request now.
+        const folderName =
+          branch !== null && isTemporaryWorktreeBranch(branch) && initialMessage !== undefined
+            ? readableWorktreeFolderName(initialMessage.text, branch)
+            : null;
         const worktree = yield* git
           .createWorktree(
             {
@@ -461,6 +468,7 @@ const make = Effect.gen(function* () {
               path: null,
             },
             {
+              ...(folderName === null ? {} : { folderName }),
               progress: {
                 onWorktreeClaimed: (path) =>
                   Effect.sync(() => {

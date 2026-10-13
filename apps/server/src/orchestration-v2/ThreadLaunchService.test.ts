@@ -1167,6 +1167,8 @@ it.effect("renames a temporary t3/<hash> branch off the provisioning critical pa
       );
       yield* Deferred.await(branchNameStarted);
       assert.equal(harness.createWorktree.mock.calls[0]?.[0]?.newRefName, "t3/abcd1234");
+      // The folder is named from the request now; only the branch waits for the model.
+      assert.equal(harness.createWorktree.mock.calls[0]?.[1]?.folderName, "build-feature-abcd1234");
       yield* waitUntil(() =>
         threads
           .getThreadProjection(launched.threadId)

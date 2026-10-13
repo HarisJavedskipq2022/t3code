@@ -3198,6 +3198,17 @@ it.layer(layerTest)("GitVcsDriver core integration", (it) => {
         assert.equal(created.worktree.path, expected);
         assert.equal(yield* fileSystem.exists(expected), true);
 
+        // A folder name decouples the folder from a branch that will be renamed.
+        const named = yield* driver.createWorktree(
+          { cwd, path: null, refName: initialBranch, newRefName: "t3/0a1b2c3d" },
+          { worktreesDirectory, folderName: "build-feature-0a1b2c3d" },
+        );
+        assert.equal(
+          named.worktree.path,
+          pathService.join(worktreesDirectory, pathService.basename(cwd), "build-feature-0a1b2c3d"),
+        );
+        assert.equal(named.worktree.refName, "t3/0a1b2c3d");
+
         const error = yield* driver
           .createWorktree(
             { cwd, path: null, refName: initialBranch, newRefName: "feature/relative-dir" },

@@ -3454,7 +3454,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
           detail: `The worktree location "${options?.worktreesDirectory}" must be an absolute folder on this machine, not a drive root. Change it in Settings → Storage.`,
         });
       }
-      worktreePath = path.join(parentDir, repoName, sanitizedBranch);
+      worktreePath = path.join(parentDir, repoName, options?.folderName ?? sanitizedBranch);
     }
     const args = input.newRefName
       ? ["worktree", "add", "-b", input.newRefName, worktreePath, input.refName]

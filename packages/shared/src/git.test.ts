@@ -11,6 +11,7 @@ import {
   normalizeGitRemoteUrl,
   parseGitHubRepositoryNameWithOwnerFromRemoteUrl,
   parseOriginUrlFromGitConfig,
+  readableWorktreeFolderName,
   resolveAutoFeatureBranchName,
   sanitizeFeatureBranchName,
   WORKTREE_BRANCH_PREFIX,
@@ -395,5 +396,29 @@ describe("formatGeneratedBranchName", () => {
         instructions: "",
       }),
     ).toBe(branch);
+  });
+});
+
+describe("readableWorktreeFolderName", () => {
+  it("names the folder after the request's meaningful words and keeps the branch token", () => {
+    expect(
+      readableWorktreeFolderName("Can you please fix the login timeout on Safari?", "t3/3f2a9c1d"),
+    ).toBe("fix-login-timeout-safari-3f2a9c1d");
+    expect(readableWorktreeFolderName("Rebase PR 2719 onto develop", "t3-0a1b2c3d")).toBe(
+      "rebase-pr-2719-onto-develop-0a1b2c3d",
+    );
+  });
+
+  it("stays short, cutting at a word boundary", () => {
+    const name = readableWorktreeFolderName(
+      "implement worktree services panel showing ports logs restarts and conflicts",
+      "t3/3f2a9c1d",
+    );
+    expect(name).toBe("implement-worktree-services-panel-3f2a9c1d");
+  });
+
+  it("is null when the request has no usable words", () => {
+    expect(readableWorktreeFolderName("🚀 ✨", "t3/3f2a9c1d")).toBeNull();
+    expect(readableWorktreeFolderName("can you please", "t3/3f2a9c1d")).toBeNull();
   });
 });
