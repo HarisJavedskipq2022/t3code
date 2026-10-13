@@ -10,8 +10,10 @@ import {
   TerminalError,
   TerminalOpenInput,
   TerminalProviderEnvironmentError,
+  TerminalRestartInput,
   TerminalResizeInput,
   TerminalSessionSnapshot,
+  TerminalStopError,
   TerminalThreadInput,
   TerminalWriteInput,
 } from "./terminal.ts";
@@ -52,6 +54,25 @@ describe("TerminalProviderEnvironmentError", () => {
       "Could not prepare the terminal environment for provider instance: codex_work",
     );
     expect(decoded.message).not.toContain("secret backend unavailable");
+  });
+});
+
+describe("TerminalStopError", () => {
+  it("round-trips its timeout context without exposing anything else", () => {
+    const error = new TerminalStopError({
+      threadId: "thread-1",
+      terminalId: DEFAULT_TERMINAL_ID,
+      timeoutMs: 5_000,
+    });
+    const decoded = decodeTerminalError(encodeTerminalError(error));
+
+    expect(decoded).toMatchObject({
+      _tag: "TerminalStopError",
+      threadId: "thread-1",
+      terminalId: DEFAULT_TERMINAL_ID,
+      timeoutMs: 5_000,
+    });
+    expect(decoded.message).toContain("5000ms");
   });
 });
 
@@ -151,6 +172,29 @@ describe("TerminalOpenInput", () => {
       ).toBe(false);
     }
   });
+
+  it("accepts a bounded command and trims it", () => {
+    const parsed = decodeSync(TerminalOpenInput, {
+      threadId: "thread-1",
+      terminalId: DEFAULT_TERMINAL_ID,
+      cwd: "/tmp/project",
+      command: "  npm run dev  ",
+    });
+    expect(parsed.command).toBe("npm run dev");
+  });
+
+  it("rejects an empty or oversized command", () => {
+    for (const command of ["", "   ", "a".repeat(65_537)]) {
+      expect(
+        decodes(TerminalOpenInput, {
+          threadId: "thread-1",
+          terminalId: DEFAULT_TERMINAL_ID,
+          cwd: "/tmp/project",
+          command,
+        }),
+      ).toBe(false);
+    }
+  });
 });
 
 describe("TerminalAttachInput", () => {
@@ -163,6 +207,18 @@ describe("TerminalAttachInput", () => {
     });
 
     expect(parsed.restartIfNotRunning).toBe(true);
+  });
+
+  it("accepts a bounded command for a command-mode restart", () => {
+    const parsed = decodeSync(TerminalRestartInput, {
+      threadId: "thread-1",
+      terminalId: DEFAULT_TERMINAL_ID,
+      cwd: "/tmp/project",
+      cols: 100,
+      rows: 24,
+      command: "npm run dev",
+    });
+    expect(parsed.command).toBe("npm run dev");
   });
 });
 

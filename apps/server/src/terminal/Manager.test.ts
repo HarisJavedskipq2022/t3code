@@ -61,6 +61,14 @@ class FakePtyProcess implements PtyAdapter.PtyProcess {
   private readonly exitListeners = new Set<(event: PtyAdapter.PtyExitEvent) => void>();
   killed = false;
   exitOnSubscribe: PtyAdapter.PtyExitEvent | undefined;
+  /** When set, a kill replays this exit, standing in for a real process exit. */
+  exitOnKill: PtyAdapter.PtyExitEvent | undefined;
+  /** Stands in for the owned process group surviving a shell that exited. */
+  processGroupAlive = false;
+  /** A SIGKILL clears the group unless a test needs it to linger. */
+  clearProcessGroupOnKill = true;
+  /** Sync side channel so a test can await the moment a signal is delivered. */
+  onKill: ((signal?: string) => void) | undefined;
 
   constructor(pid: number) {
     this.pid = pid;
@@ -83,6 +91,13 @@ class FakePtyProcess implements PtyAdapter.PtyProcess {
   kill(signal?: string): void {
     this.killed = true;
     this.killSignals.push(signal);
+    this.onKill?.(signal);
+    if (signal === "SIGKILL" && this.clearProcessGroupOnKill) this.processGroupAlive = false;
+    if (this.exitOnKill) this.emitExit(this.exitOnKill);
+  }
+
+  isProcessGroupAlive(): boolean {
+    return this.processGroupAlive;
   }
 
   onData(callback: (data: string) => void): () => void {
@@ -120,6 +135,9 @@ class FakePtyAdapter {
   private readonly mode: "sync" | "async";
   private nextPid = 9000;
   exitOnSubscribe: PtyAdapter.PtyExitEvent | undefined;
+  exitOnKill: PtyAdapter.PtyExitEvent | undefined;
+  processGroupAlive = false;
+  clearProcessGroupOnKill = true;
 
   constructor(mode: "sync" | "async" = "sync") {
     this.mode = mode;
@@ -141,6 +159,9 @@ class FakePtyAdapter {
     }
     const process = new FakePtyProcess(this.nextPid++);
     process.exitOnSubscribe = this.exitOnSubscribe;
+    process.exitOnKill = this.exitOnKill;
+    process.processGroupAlive = this.processGroupAlive;
+    process.clearProcessGroupOnKill = this.clearProcessGroupOnKill;
     this.processes.push(process);
     if (this.mode === "async") {
       return Effect.tryPromise({
@@ -176,6 +197,29 @@ const waitFor = <E, R>(
       }),
     ),
   );
+
+/**
+ * A Deferred completed the moment `process` receives `signal`. Install it
+ * before starting the work whose wait it marks, so the signal is not missed.
+ */
+const signalMilestone = (process: FakePtyProcess, signal = "SIGTERM"): Deferred.Deferred<void> => {
+  const delivered = Deferred.makeUnsafe<void>();
+  process.onKill = (next) => {
+    if (next === signal) Deferred.doneUnsafe(delivered, Effect.void);
+  };
+  return delivered;
+};
+
+/**
+ * After a milestone, give the waiter a scheduling turn and fire the 1000ms stop
+ * bound. Two advances cover the timer being scheduled before or after the first.
+ */
+const advancePastStopBound = Effect.gen(function* () {
+  yield* Effect.yieldNow;
+  yield* TestClock.adjust(Duration.millis(1_001));
+  yield* Effect.yieldNow;
+  yield* TestClock.adjust(Duration.millis(1_001));
+});
 
 function openInput(overrides: Partial<TerminalOpenInput> = {}): TerminalOpenInput {
   return {
@@ -235,6 +279,7 @@ interface CreateManagerOptions {
   >;
   subprocessPollIntervalMs?: number;
   processKillGraceMs?: number;
+  stopTimeoutMs?: number;
   maxRetainedInactiveSessions?: number;
   historyByteLimit?: number;
   ptyAdapter?: FakePtyAdapter;
@@ -243,6 +288,9 @@ interface CreateManagerOptions {
   >[0]["resolveProviderInstanceEnvironment"];
   managedBinaryCacheDir?: string;
   managedBinaryToolsDir?: string;
+  registerTerminalProcesses?: Parameters<
+    typeof TerminalManager.makeWithOptions
+  >[0]["registerTerminalProcesses"];
 }
 
 interface ManagerFixture {
@@ -281,10 +329,14 @@ const createManager = (
           ? { subprocessInspector: options.subprocessInspector }
           : {}),
         ...(options.processTable !== undefined ? { processTable: options.processTable } : {}),
+        ...(options.registerTerminalProcesses !== undefined
+          ? { registerTerminalProcesses: options.registerTerminalProcesses }
+          : {}),
         ...(options.subprocessPollIntervalMs !== undefined
           ? { subprocessPollIntervalMs: options.subprocessPollIntervalMs }
           : {}),
         processKillGraceMs: options.processKillGraceMs ?? 1,
+        ...(options.stopTimeoutMs !== undefined ? { stopTimeoutMs: options.stopTimeoutMs } : {}),
         ...(options.maxRetainedInactiveSessions !== undefined
           ? { maxRetainedInactiveSessions: options.maxRetainedInactiveSessions }
           : {}),
@@ -2958,5 +3010,627 @@ it.layer(
       assert.equal(process.killSignals[0], "SIGTERM");
       expect(process.killSignals).toContain("SIGKILL");
     }).pipe(Effect.provide(TestClock.layer())),
+  );
+
+  it.effect("keeps an interactive shell unchanged when no command is given", () =>
+    Effect.gen(function* () {
+      const { manager, ptyAdapter } = yield* createManager(5, {
+        shellResolver: () => "/bin/zsh",
+      });
+      yield* manager.open(openInput());
+
+      expect(ptyAdapter.spawnInputs).toHaveLength(1);
+      expect(ptyAdapter.spawnInputs[0]?.args).toEqual(["-o", "nopromptsp"]);
+      expect(ptyAdapter.spawnInputs[0]).not.toHaveProperty("signalProcessGroup");
+    }),
+  );
+
+  it.effect("runs a command through the selected POSIX shell as one process", () =>
+    Effect.gen(function* () {
+      const { manager, ptyAdapter } = yield* createManager(5, {
+        shellResolver: () => "/bin/zsh",
+      });
+      const snapshot = yield* manager.open(openInput({ command: "npm run dev" }));
+
+      assert.equal(snapshot.status, "running");
+      expect(ptyAdapter.spawnInputs).toHaveLength(1);
+      expect(ptyAdapter.spawnInputs[0]).toMatchObject({
+        shell: "/bin/zsh",
+        args: ["-o", "nopromptsp", "-c", "npm run dev"],
+        signalProcessGroup: true,
+        cwd: process.cwd(),
+      });
+    }),
+  );
+
+  it.effect("runs a command through PowerShell with -Command on Windows", () =>
+    Effect.gen(function* () {
+      const { manager, ptyAdapter } = yield* createManager(5, {
+        env: {
+          ComSpec: "C:\\Windows\\System32\\cmd.exe",
+          SystemRoot: "C:\\Windows",
+          PATH: "C:\\Windows\\System32",
+        },
+      }).pipe(Effect.provide(layerWithHostPlatform("win32")));
+
+      yield* manager.open(openInput({ command: "npm run dev" }));
+
+      expect(ptyAdapter.spawnInputs[0]).toMatchObject({
+        shell: "pwsh.exe",
+        // Native `-Command` semantics; the reported exit code is PowerShell's.
+        args: ["-NoLogo", "-Command", "npm run dev"],
+        signalProcessGroup: true,
+      });
+    }),
+  );
+
+  it.effect("runs a command through cmd.exe with /d /s /c on Windows", () =>
+    Effect.gen(function* () {
+      const { manager, ptyAdapter } = yield* createManager(5, {
+        shellResolver: () => "C:\\Windows\\System32\\cmd.exe",
+        env: {
+          ComSpec: "C:\\Windows\\System32\\cmd.exe",
+          SystemRoot: "C:\\Windows",
+          PATH: "C:\\Windows\\System32",
+        },
+      }).pipe(Effect.provide(layerWithHostPlatform("win32")));
+
+      yield* manager.open(openInput({ command: "npm run dev" }));
+
+      expect(ptyAdapter.spawnInputs[0]).toMatchObject({
+        shell: "C:\\Windows\\System32\\cmd.exe",
+        args: ["/d", "/s", "/c", "npm run dev"],
+        signalProcessGroup: true,
+      });
+    }),
+  );
+
+  it.effect("attaching a running command terminal never re-runs the command", () =>
+    Effect.gen(function* () {
+      const { manager, ptyAdapter } = yield* createManager();
+      yield* manager.open(openInput({ command: "npm run dev" }));
+
+      const attached: TerminalAttachStreamEvent[] = [];
+      const unsubscribe = yield* manager.attachStream(
+        {
+          threadId: "thread-1",
+          terminalId: DEFAULT_TERMINAL_ID,
+          cols: 100,
+          rows: 24,
+          restartIfNotRunning: true,
+        },
+        (event) =>
+          Effect.sync(() => {
+            attached.push(event);
+          }),
+      );
+      unsubscribe();
+
+      expect(attached.find((event) => event.type === "snapshot")).toMatchObject({
+        snapshot: { status: "running" },
+      });
+      expect(ptyAdapter.spawnInputs).toHaveLength(1);
+    }),
+  );
+
+  it.effect("records a command terminal's native exit code", () =>
+    Effect.gen(function* () {
+      const ptyAdapter = new FakePtyAdapter();
+      ptyAdapter.exitOnSubscribe = { exitCode: 3, signal: null };
+      const { manager, getEvents } = yield* createManager(5, { ptyAdapter });
+
+      yield* manager.open(openInput({ command: "exit 3" }));
+      yield* waitFor(
+        Effect.map(getEvents, (events) => events.some((event) => event.type === "exited")),
+      );
+
+      const exited = (yield* getEvents).find((event) => event.type === "exited");
+      expect(exited).toMatchObject({ exitCode: 3 });
+    }),
+  );
+
+  it.effect("registers a childless command terminal's own process for port ownership", () =>
+    Effect.gen(function* () {
+      const registered = new Map<string, ReadonlyArray<number>>();
+      const { manager } = yield* createManager(5, {
+        subprocessInspector: () =>
+          Effect.succeed({ hasRunningSubprocess: false, childCommand: null, processIds: [] }),
+        subprocessPollIntervalMs: 20,
+        registerTerminalProcesses: (input) =>
+          Effect.sync(() => {
+            registered.set(input.terminalId, input.processIds);
+          }),
+      });
+
+      const service = yield* manager.open(
+        openInput({ terminalId: "service", command: "python3 -m http.server" }),
+      );
+      yield* manager.open(openInput({ terminalId: "shell" }));
+      yield* waitFor(
+        Effect.sync(() => registered.has("service") && registered.has("shell")),
+        "1200 millis",
+      );
+
+      // The shell exec'd the server, so the terminal process is what listens.
+      expect(registered.get("service")).toEqual([service.pid]);
+      expect(registered.get("shell")).toEqual([]);
+    }),
+  );
+
+  it.effect("closeIdle keeps a running command terminal", () =>
+    Effect.gen(function* () {
+      const { manager, ptyAdapter } = yield* createManager(5, {
+        subprocessInspector: () =>
+          Effect.succeed({ hasRunningSubprocess: false, childCommand: null, processIds: [] }),
+      });
+
+      yield* manager.open(openInput({ terminalId: "service", command: "npm run dev" }));
+      yield* manager.open(openInput({ terminalId: "idle" }));
+      yield* manager.closeIdle({ threadId: "thread-1" });
+
+      expect(ptyAdapter.processes.map((process) => process.killed)).toEqual([false, true]);
+    }),
+  );
+
+  it.effect("stop signals the owned command process, waits for exit, and keeps history", () =>
+    Effect.gen(function* () {
+      const ptyAdapter = new FakePtyAdapter();
+      ptyAdapter.exitOnKill = { exitCode: 0, signal: null };
+      const { manager } = yield* createManager(5, { ptyAdapter });
+
+      yield* manager.open(openInput({ command: "npm run dev" }));
+      const process = ptyAdapter.processes[0];
+      expect(process).toBeDefined();
+      if (!process) return;
+      process.emitData("server ready\n");
+
+      yield* manager.stop({ threadId: "thread-1", terminalId: DEFAULT_TERMINAL_ID });
+
+      expect(process.killSignals).toContain("SIGTERM");
+
+      const observed: TerminalAttachStreamEvent[] = [];
+      const unsubscribe = yield* manager.observeStream(
+        { threadId: "thread-1", terminalId: DEFAULT_TERMINAL_ID },
+        (event) =>
+          Effect.sync(() => {
+            observed.push(event);
+          }),
+      );
+      unsubscribe();
+      const snapshot = observed.find((event) => event.type === "snapshot");
+      expect(snapshot).toMatchObject({ snapshot: { status: "exited", exitCode: 0 } });
+      if (snapshot?.type === "snapshot") {
+        expect(snapshot.snapshot.history).toContain("server ready");
+      }
+    }),
+  );
+
+  it.effect("stop never touches a sibling terminal", () =>
+    Effect.gen(function* () {
+      const ptyAdapter = new FakePtyAdapter();
+      ptyAdapter.exitOnKill = { exitCode: 0, signal: null };
+      const { manager } = yield* createManager(5, { ptyAdapter });
+
+      yield* manager.open(openInput({ terminalId: "service", command: "npm run dev" }));
+      yield* manager.open(openInput({ terminalId: "other", command: "sleep 1000" }));
+      const [service, other] = ptyAdapter.processes;
+      expect(service).toBeDefined();
+      expect(other).toBeDefined();
+      if (!service || !other) return;
+
+      yield* manager.stop({ threadId: "thread-1", terminalId: "service" });
+
+      expect(service.killSignals).toContain("SIGTERM");
+      expect(other.killSignals).toEqual([]);
+      expect(other.killed).toBe(false);
+    }),
+  );
+
+  it.effect("stop fails with TerminalStopError and keeps the session running on timeout", () =>
+    Effect.gen(function* () {
+      const scope = yield* Scope.make("sequential");
+      const { manager, ptyAdapter } = yield* createManager(5, {
+        // Grace far beyond the stop bound, so only the bound can end the wait.
+        processKillGraceMs: 60_000,
+        stopTimeoutMs: 1_000,
+      }).pipe(Effect.provideService(Scope.Scope, scope));
+      yield* manager.open(openInput({ command: "npm run dev" }));
+      const process = ptyAdapter.processes[0];
+      expect(process).toBeDefined();
+      if (!process) return;
+
+      // Milestone: the escalation delivered TERM, so the stop is waiting.
+      const termSent = signalMilestone(process);
+      const stopFiber = yield* manager
+        .stop({ threadId: "thread-1", terminalId: DEFAULT_TERMINAL_ID })
+        .pipe(Effect.flip, Effect.forkScoped);
+      yield* Deferred.await(termSent);
+      yield* advancePastStopBound;
+      const error = yield* Fiber.join(stopFiber);
+
+      expect(error).toMatchObject({
+        _tag: "TerminalStopError",
+        threadId: "thread-1",
+        terminalId: DEFAULT_TERMINAL_ID,
+        timeoutMs: 1_000,
+      });
+      // No re-spawn: the session stayed running for a retry.
+      expect(ptyAdapter.spawnInputs).toHaveLength(1);
+
+      // Shut the still-running session down under the clock so teardown's
+      // escalation finishes instead of waiting out the 60s grace.
+      const shutdown = yield* Scope.close(scope, Exit.void).pipe(Effect.forkScoped);
+      yield* Effect.yieldNow;
+      yield* TestClock.adjust(Duration.millis(60_001));
+      yield* Fiber.join(shutdown);
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
+
+  it.effect("restarting a command terminal re-runs the command", () =>
+    Effect.gen(function* () {
+      const ptyAdapter = new FakePtyAdapter();
+      ptyAdapter.exitOnKill = { exitCode: 0, signal: null };
+      const { manager } = yield* createManager(5, { ptyAdapter });
+
+      yield* manager.open(openInput({ command: "npm run dev" }));
+      yield* manager.stop({ threadId: "thread-1", terminalId: DEFAULT_TERMINAL_ID });
+      yield* manager.restart(restartInput({ command: "npm run dev" }));
+
+      expect(ptyAdapter.spawnInputs).toHaveLength(2);
+      expect(ptyAdapter.spawnInputs[1]?.args).toContain("-c");
+      expect(ptyAdapter.spawnInputs[1]?.args).toContain("npm run dev");
+      expect(ptyAdapter.spawnInputs[1]?.signalProcessGroup).toBe(true);
+    }),
+  );
+
+  it.effect("stop waits for the command's process group after the shell exits", () =>
+    Effect.gen(function* () {
+      const ptyAdapter = new FakePtyAdapter();
+      // The shell dies on TERM, but a descendant keeps the group alive until
+      // the escalation's SIGKILL.
+      ptyAdapter.exitOnKill = { exitCode: 0, signal: null };
+      ptyAdapter.processGroupAlive = true;
+      const { manager } = yield* createManager(5, {
+        ptyAdapter,
+        processKillGraceMs: 100,
+        stopTimeoutMs: 5_000,
+      });
+      yield* manager.open(openInput({ command: "npm run dev" }));
+      const process = ptyAdapter.processes[0];
+      expect(process).toBeDefined();
+      if (!process) return;
+
+      const stopFiber = yield* manager
+        .stop({ threadId: "thread-1", terminalId: DEFAULT_TERMINAL_ID })
+        .pipe(Effect.forkScoped);
+      yield* Effect.yieldNow;
+      yield* TestClock.adjust(Duration.millis(500));
+      yield* Fiber.join(stopFiber);
+
+      expect(process.killSignals).toContain("SIGTERM");
+      expect(process.killSignals).toContain("SIGKILL");
+      expect(process.processGroupAlive).toBe(false);
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
+
+  it.effect("stop fails when the command's process group never disappears", () =>
+    Effect.gen(function* () {
+      const ptyAdapter = new FakePtyAdapter();
+      ptyAdapter.exitOnKill = { exitCode: 0, signal: null };
+      ptyAdapter.processGroupAlive = true;
+      // SIGKILL does not clear the group: it is genuinely stuck.
+      ptyAdapter.clearProcessGroupOnKill = false;
+      const { manager, ptyAdapter: pty } = yield* createManager(5, {
+        ptyAdapter,
+        processKillGraceMs: 100,
+        stopTimeoutMs: 1_000,
+      });
+      yield* manager.open(openInput({ command: "npm run dev" }));
+      const process = pty.processes[0];
+      expect(process).toBeDefined();
+      if (!process) return;
+
+      const termSent = signalMilestone(process);
+      const stopFiber = yield* manager
+        .stop({ threadId: "thread-1", terminalId: DEFAULT_TERMINAL_ID })
+        .pipe(Effect.flip, Effect.forkScoped);
+      yield* Deferred.await(termSent);
+      yield* advancePastStopBound;
+      const error = yield* Fiber.join(stopFiber);
+
+      expect(error).toMatchObject({ _tag: "TerminalStopError", timeoutMs: 1_000 });
+      process.processGroupAlive = false;
+      yield* manager.stop({ threadId: "thread-1", terminalId: DEFAULT_TERMINAL_ID });
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
+
+  it.effect("reopening a live command terminal never reruns it despite a new cwd or env", () =>
+    Effect.gen(function* () {
+      const path = yield* Path.Path;
+      const { manager, ptyAdapter, baseDir } = yield* createManager(5, {
+        shellResolver: () => "/bin/zsh",
+      });
+      const originalCwd = process.cwd();
+      yield* manager.open(
+        openInput({ command: "npm run dev", cwd: originalCwd, env: { RUNTIME_FLAG: "1" } }),
+      );
+      // An observer passes a different (even nonexistent) cwd and env; a live
+      // command terminal's launch context is immutable, so nothing restarts.
+      const reopened = yield* manager.open(
+        openInput({
+          command: "npm run dev",
+          cwd: path.join(baseDir, "elsewhere"),
+          env: { RUNTIME_FLAG: "2" },
+        }),
+      );
+
+      assert.equal(reopened.status, "running");
+      assert.equal(reopened.cwd, originalCwd);
+      expect(ptyAdapter.spawnInputs).toHaveLength(1);
+    }),
+  );
+
+  it.effect("restarting a running command terminal awaits the old process first", () =>
+    Effect.gen(function* () {
+      const ptyAdapter = new FakePtyAdapter();
+      ptyAdapter.exitOnKill = { exitCode: 0, signal: null };
+      const { manager, ptyAdapter: pty } = yield* createManager(5, { ptyAdapter });
+      yield* manager.open(openInput({ command: "npm run dev" }));
+      const first = pty.processes[0];
+      expect(first).toBeDefined();
+      if (!first) return;
+
+      yield* manager.restart(restartInput({ command: "npm run dev" }));
+
+      expect(first.killSignals).toContain("SIGTERM");
+      expect(pty.spawnInputs).toHaveLength(2);
+      expect(pty.spawnInputs[1]?.args).toContain("npm run dev");
+    }),
+  );
+
+  it.effect("an interrupted stop releases its listener and a later stop still converges", () =>
+    Effect.gen(function* () {
+      const ptyAdapter = new FakePtyAdapter();
+      const { manager, ptyAdapter: pty } = yield* createManager(5, {
+        ptyAdapter,
+        processKillGraceMs: 10,
+        stopTimeoutMs: 10_000,
+      });
+      yield* manager.open(openInput({ command: "npm run dev" }));
+      const process = pty.processes[0];
+      expect(process).toBeDefined();
+      if (!process) return;
+
+      // The shell ignores TERM; wait until the stop is mid-wait, then interrupt.
+      const termSent = signalMilestone(process);
+      const interrupted = yield* manager
+        .stop({ threadId: "thread-1", terminalId: DEFAULT_TERMINAL_ID })
+        .pipe(Effect.forkScoped);
+      yield* Deferred.await(termSent);
+      yield* Fiber.interrupt(interrupted);
+
+      // Let the captured process end on TERM; a later stop must converge.
+      process.exitOnKill = { exitCode: 0, signal: null };
+      yield* manager.stop({ threadId: "thread-1", terminalId: DEFAULT_TERMINAL_ID });
+
+      expect(pty.spawnInputs).toHaveLength(1);
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
+
+  it.effect("stop retries the retained command group and only succeeds once it is gone", () =>
+    Effect.gen(function* () {
+      const ptyAdapter = new FakePtyAdapter();
+      ptyAdapter.exitOnKill = { exitCode: 0, signal: null };
+      ptyAdapter.processGroupAlive = true;
+      // The group outlives SIGKILL until the test clears it.
+      ptyAdapter.clearProcessGroupOnKill = false;
+      const { manager, ptyAdapter: pty } = yield* createManager(5, {
+        ptyAdapter,
+        processKillGraceMs: 10_000,
+        stopTimeoutMs: 1_000,
+      });
+      yield* manager.open(openInput({ command: "npm run dev" }));
+      const process = pty.processes[0];
+      expect(process).toBeDefined();
+      if (!process) return;
+
+      const firstTerm = signalMilestone(process);
+      const firstFiber = yield* manager
+        .stop({ threadId: "thread-1", terminalId: DEFAULT_TERMINAL_ID })
+        .pipe(Effect.flip, Effect.forkScoped);
+      yield* Deferred.await(firstTerm);
+      yield* advancePastStopBound;
+      expect(yield* Fiber.join(firstFiber)).toMatchObject({ _tag: "TerminalStopError" });
+
+      // The retained group keeps the next stop failing; nothing respawns.
+      const secondTerm = signalMilestone(process);
+      const secondFiber = yield* manager
+        .stop({ threadId: "thread-1", terminalId: DEFAULT_TERMINAL_ID })
+        .pipe(Effect.flip, Effect.forkScoped);
+      yield* Deferred.await(secondTerm);
+      yield* advancePastStopBound;
+      expect(yield* Fiber.join(secondFiber)).toMatchObject({ _tag: "TerminalStopError" });
+      expect(pty.spawnInputs).toHaveLength(1);
+
+      // Group finally gone: the retained stop succeeds, still one spawn.
+      process.processGroupAlive = false;
+      yield* manager.stop({ threadId: "thread-1", terminalId: DEFAULT_TERMINAL_ID });
+      expect(pty.spawnInputs).toHaveLength(1);
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
+
+  it.effect("reopening an exited command terminal stops its retained group before respawning", () =>
+    Effect.gen(function* () {
+      const ptyAdapter = new FakePtyAdapter();
+      ptyAdapter.exitOnKill = { exitCode: 0, signal: null };
+      ptyAdapter.processGroupAlive = true;
+      ptyAdapter.clearProcessGroupOnKill = false;
+      const { manager, ptyAdapter: pty } = yield* createManager(5, {
+        ptyAdapter,
+        processKillGraceMs: 10_000,
+        stopTimeoutMs: 1_000,
+      });
+      yield* manager.open(openInput({ command: "npm run dev" }));
+      const process = pty.processes[0];
+      expect(process).toBeDefined();
+      if (!process) return;
+
+      // The shell exits on its own, leaving the group alive. Wait on the real
+      // exited event rather than polling.
+      const exited = yield* Deferred.make<void>();
+      const unsubscribe = yield* manager.subscribe((event) =>
+        event.threadId === "thread-1" &&
+        event.terminalId === DEFAULT_TERMINAL_ID &&
+        event.type === "exited"
+          ? Deferred.succeed(exited, undefined).pipe(Effect.asVoid)
+          : Effect.void,
+      );
+      process.emitExit({ exitCode: 0, signal: 0 });
+      yield* Deferred.await(exited);
+      unsubscribe();
+
+      // The retained group is stuck, so reopening must not spawn a replacement.
+      const reopenTerm = signalMilestone(process);
+      const failedOpen = yield* manager
+        .open(openInput({ command: "npm run dev" }))
+        .pipe(Effect.flip, Effect.forkScoped);
+      yield* Deferred.await(reopenTerm);
+      yield* advancePastStopBound;
+      expect(yield* Fiber.join(failedOpen)).toMatchObject({ _tag: "TerminalStopError" });
+      expect(pty.spawnInputs).toHaveLength(1);
+
+      // Group gone: reopening stops the retained handle and spawns a replacement.
+      process.processGroupAlive = false;
+      ptyAdapter.processGroupAlive = false;
+      yield* manager.open(openInput({ command: "npm run dev" }));
+      expect(pty.spawnInputs).toHaveLength(2);
+
+      // Stop the replacement and await its exit so the manager's scope teardown
+      // has no live shell left that would wait out the grace.
+      const replacement = pty.processes[1];
+      expect(replacement).toBeDefined();
+      if (!replacement) return;
+      replacement.exitOnKill = { exitCode: 0, signal: null };
+      yield* manager.stop({ threadId: "thread-1", terminalId: DEFAULT_TERMINAL_ID });
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
+
+  it.effect("keeps an inactive session that retains a live command group during eviction", () =>
+    Effect.gen(function* () {
+      const ptyAdapter = new FakePtyAdapter();
+      ptyAdapter.processGroupAlive = true;
+      ptyAdapter.clearProcessGroupOnKill = false;
+      const { manager, ptyAdapter: pty } = yield* createManager(5, {
+        ptyAdapter,
+        maxRetainedInactiveSessions: 1,
+      });
+
+      // The service shell exits on its own, retaining a live group.
+      yield* manager.open(openInput({ terminalId: "service", command: "npm run dev" }));
+      const serviceExited = yield* Deferred.make<void>();
+      const offService = yield* manager.subscribe((event) =>
+        event.terminalId === "service" && event.type === "exited"
+          ? Deferred.succeed(serviceExited, undefined).pipe(Effect.asVoid)
+          : Effect.void,
+      );
+      pty.processes[0]!.emitExit({ exitCode: 0, signal: 0 });
+      yield* Deferred.await(serviceExited);
+      offService();
+      ptyAdapter.processGroupAlive = false;
+
+      // Two ordinary idle shells push past the retention limit.
+      for (const terminalId of ["idle-a", "idle-b"]) {
+        const exited = yield* Deferred.make<void>();
+        const off = yield* manager.subscribe((event) =>
+          event.terminalId === terminalId && event.type === "exited"
+            ? Deferred.succeed(exited, undefined).pipe(Effect.asVoid)
+            : Effect.void,
+        );
+        yield* manager.open(openInput({ terminalId }));
+        pty.processes.at(-1)!.emitExit({ exitCode: 0, signal: 0 });
+        yield* Deferred.await(exited);
+        off();
+      }
+
+      // The oldest ordinary session was evicted; the retained one survives.
+      const statusOf = (terminalId: string) =>
+        Effect.gen(function* () {
+          const seen: TerminalAttachStreamEvent[] = [];
+          const observe = yield* manager
+            .observeStream({ threadId: "thread-1", terminalId }, (event) =>
+              Effect.sync(() => {
+                seen.push(event);
+              }),
+            )
+            .pipe(Effect.option);
+          if (Option.isNone(observe)) return null;
+          observe.value();
+          const snap = seen.find((event) => event.type === "snapshot");
+          return snap?.type === "snapshot" ? snap.snapshot.status : null;
+        });
+      expect(yield* statusOf("service")).toBe("exited");
+      const service = pty.processes[0]!;
+      service.onKill = () => {
+        service.processGroupAlive = false;
+      };
+      yield* manager.stop({ threadId: "thread-1", terminalId: "service" });
+      expect(service.killSignals).toContain("SIGTERM");
+    }),
+  );
+
+  it.effect("close signals a retained command group left by an exited shell", () =>
+    Effect.gen(function* () {
+      const ptyAdapter = new FakePtyAdapter();
+      ptyAdapter.processGroupAlive = true;
+      ptyAdapter.clearProcessGroupOnKill = false;
+      const { manager, ptyAdapter: pty } = yield* createManager(5, {
+        ptyAdapter,
+        processKillGraceMs: 10,
+      });
+      yield* manager.open(openInput({ terminalId: "service", command: "npm run dev" }));
+      const service = pty.processes[0]!;
+      const exited = yield* Deferred.make<void>();
+      const off = yield* manager.subscribe((event) =>
+        event.terminalId === "service" && event.type === "exited"
+          ? Deferred.succeed(exited, undefined).pipe(Effect.asVoid)
+          : Effect.void,
+      );
+      service.emitExit({ exitCode: 0, signal: 0 });
+      yield* Deferred.await(exited);
+      off();
+
+      const termSent = signalMilestone(service);
+      yield* manager.close({ threadId: "thread-1", terminalId: "service" });
+      yield* Deferred.await(termSent);
+      expect(service.killSignals).toContain("SIGTERM");
+    }),
+  );
+
+  it.effect("scope shutdown signals a retained command group", () =>
+    Effect.gen(function* () {
+      const scope = yield* Scope.make("sequential");
+      const ptyAdapter = new FakePtyAdapter();
+      ptyAdapter.processGroupAlive = true;
+      ptyAdapter.clearProcessGroupOnKill = false;
+      const { manager, ptyAdapter: pty } = yield* createManager(5, {
+        ptyAdapter,
+        processKillGraceMs: 10,
+      }).pipe(Effect.provideService(Scope.Scope, scope));
+      yield* manager.open(openInput({ terminalId: "service", command: "npm run dev" }));
+      const service = pty.processes[0]!;
+      const exited = yield* Deferred.make<void>();
+      const off = yield* manager.subscribe((event) =>
+        event.terminalId === "service" && event.type === "exited"
+          ? Deferred.succeed(exited, undefined).pipe(Effect.asVoid)
+          : Effect.void,
+      );
+      service.emitExit({ exitCode: 0, signal: 0 });
+      yield* Deferred.await(exited);
+      off();
+
+      yield* Scope.close(scope, Exit.void);
+
+      expect(service.killSignals).toContain("SIGTERM");
+    }),
   );
 });

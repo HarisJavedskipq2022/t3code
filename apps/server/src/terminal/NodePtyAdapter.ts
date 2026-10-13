@@ -41,6 +41,12 @@ export const NodePtyModuleLoaderRef = Context.Reference<NodePtyModuleLoader>(
   { defaultValue: () => loadNodePty },
 );
 
+/** Whether a thrown error carries a POSIX errno code. */
+const isErrnoCode = (error: unknown, code: string): boolean =>
+  typeof error === "object" &&
+  error !== null &&
+  (error as { readonly code?: unknown }).code === code;
+
 let didEnsureSpawnHelperExecutable = false;
 
 const resolveNodePtySpawnHelperPath = Effect.gen(function* () {
@@ -174,13 +180,19 @@ const killStartingWindowsPty = (process: import("node-pty").IPty) =>
 class NodePtyProcess implements PtyAdapter.PtyProcess {
   private readonly process: import("node-pty").IPty;
   private readonly platform: NodeJS.Platform;
+  private readonly signalProcessGroup: boolean;
   private exitEvent: PtyAdapter.PtyExitEvent | undefined;
   private readonly exitListeners = new Set<(event: PtyAdapter.PtyExitEvent) => void>();
   private readonly exitSubscription: import("node-pty").IDisposable;
 
-  constructor(process: import("node-pty").IPty, platform: NodeJS.Platform) {
+  constructor(
+    process: import("node-pty").IPty,
+    platform: NodeJS.Platform,
+    signalProcessGroup: boolean,
+  ) {
     this.process = process;
     this.platform = platform;
+    this.signalProcessGroup = signalProcessGroup;
     // Retain exits while Windows readiness and the manager hand off the process.
     this.exitSubscription = process.onExit((event) => {
       if (this.exitEvent) return;
@@ -205,7 +217,45 @@ class NodePtyProcess implements PtyAdapter.PtyProcess {
 
   kill(signal?: string): void {
     // node-pty terminates the Windows process tree without a POSIX signal.
-    this.process.kill(this.platform === "win32" ? undefined : signal);
+    if (this.platform === "win32") {
+      this.process.kill(undefined);
+      return;
+    }
+    // forkpty makes the child a session leader, so its PID is also the group
+    // id and the captured PID addresses the whole owned group. Only an
+    // explicit signal uses this path; an untyped kill keeps node-pty's own
+    // semantics. ESRCH means the group is already gone; any other failure is
+    // real and must not silently degrade to a single-PID kill.
+    if (this.signalProcessGroup && signal !== undefined && this.validGroupPid()) {
+      try {
+        process.kill(-this.pid, signal as NodeJS.Signals);
+        return;
+      } catch (error) {
+        if (!isErrnoCode(error, "ESRCH")) throw error;
+        return;
+      }
+    }
+    this.process.kill(signal);
+  }
+
+  /**
+   * Whether the owned process group still has members. Signal 0 neither
+   * delivers a signal nor creates one; EPERM still means the group exists.
+   */
+  isProcessGroupAlive(): boolean {
+    if (this.platform === "win32" || !this.signalProcessGroup || !this.validGroupPid()) {
+      return false;
+    }
+    try {
+      process.kill(-this.pid, 0);
+      return true;
+    } catch (error) {
+      return !isErrnoCode(error, "ESRCH");
+    }
+  }
+
+  private validGroupPid(): boolean {
+    return Number.isInteger(this.pid) && this.pid > 0;
   }
 
   onData(callback: (data: string) => void): () => void {
@@ -278,7 +328,10 @@ export const make = Effect.fn("NodePtyAdapter.make")(function* () {
             env,
             name: "xterm-256color",
           });
-          return { nativeProcess, process: new NodePtyProcess(nativeProcess, platform) };
+          return {
+            nativeProcess,
+            process: new NodePtyProcess(nativeProcess, platform, input.signalProcessGroup === true),
+          };
         },
         catch: (cause) =>
           new PtyAdapter.PtySpawnError({

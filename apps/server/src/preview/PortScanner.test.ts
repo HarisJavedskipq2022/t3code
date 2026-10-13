@@ -21,6 +21,7 @@ import * as TestClock from "effect/testing/TestClock";
 import * as Tracer from "effect/Tracer";
 import { expect } from "vite-plus/test";
 import { FetchHttpClient } from "effect/http";
+import { ChildProcessSpawner } from "effect/process";
 
 import * as ProcessRunner from "../processRunner.ts";
 import * as PortScanner from "./PortScanner.ts";
@@ -99,7 +100,7 @@ const layerLsofScanner = (input: {
             Effect.succeed({
               stdout: input.stdout?.() ?? `p${input.pid()}\ncnode\nn*:${LSOF_TEST_PORT}\n`,
               stderr: "",
-              code: null,
+              code: ChildProcessSpawner.ExitCode(0),
               timedOut: false,
               stdoutTruncated: false,
               stderrTruncated: false,
@@ -789,3 +790,181 @@ effectIt.effect("does not swallow process probe interruption", () =>
     }
   }),
 );
+
+const lsofRun = (
+  stdout: string,
+  options: { readonly code?: ChildProcessSpawner.ExitCode | null; readonly stderr?: string } = {},
+) => {
+  const run: ProcessRunner.ProcessRunner["Service"]["run"] = () =>
+    Effect.succeed({
+      stdout,
+      stderr: options.stderr ?? "",
+      code: options.code === undefined ? ChildProcessSpawner.ExitCode(0) : options.code,
+      timedOut: false,
+      stdoutTruncated: false,
+      stderrTruncated: false,
+      stdoutInvalidUtf8: false,
+      stderrInvalidUtf8: false,
+    });
+  return run;
+};
+
+const lsofOkRun = (
+  stdout: string,
+  code: ChildProcessSpawner.ExitCode = ChildProcessSpawner.ExitCode(0),
+) => {
+  const run: ProcessRunner.ProcessRunner["Service"]["run"] = () =>
+    Effect.succeed({
+      stdout,
+      stderr: "",
+      code,
+      timedOut: false,
+      stdoutTruncated: false,
+      stderrTruncated: false,
+      stdoutInvalidUtf8: false,
+      stderrInvalidUtf8: false,
+    });
+  return run;
+};
+
+const layerWithLsofRun = (run: ProcessRunner.ProcessRunner["Service"]["run"]) =>
+  PortScanner.layer.pipe(
+    Layer.provide(
+      Layer.mergeAll(
+        layerNoProc,
+        Layer.succeed(ProcessRunner.ProcessRunner, { run }),
+        Layer.succeed(HostProcess.Platform, "linux"),
+        FetchHttpClient.layer,
+      ),
+    ),
+  );
+
+const lsofListenerStdout = `p1234\ncnode\nn*:${LSOF_TEST_PORT}\n`;
+
+effectIt.effect("lists a raw non-HTTP listener through inspectListeners only", () => {
+  const requests: string[] = [];
+  const fetchFn = ((input: Parameters<typeof globalThis.fetch>[0]) => {
+    requests.push(String(input));
+    return Promise.reject(new TypeError("not HTTP"));
+  }) as typeof globalThis.fetch;
+  const layer = layerLsofScanner({ pid: () => 1234, fetch: fetchFn });
+
+  return Effect.gen(function* () {
+    const scanner = yield* ownedScanner();
+    // The default preview scan still returns only HTML-verified browser URLs.
+    expect(yield* scanner.scan()).toHaveLength(0);
+    const requestsAfterDefaultScan = requests.length;
+    expect(requestsAfterDefaultScan).toBeGreaterThan(0);
+
+    const inspection = yield* scanner.inspectListeners();
+    expect(inspection.available).toBe(true);
+    expect(inspection.listeners).toHaveLength(1);
+    expect(inspection.listeners[0]).toMatchObject({
+      host: "localhost",
+      port: LSOF_TEST_PORT,
+      pid: 1234,
+      processName: "node",
+      terminal: { threadId: "scanner-thread", terminalId: "scanner-terminal" },
+    });
+    // Raw listeners are never HTTP-probed.
+    expect(requests.length).toBe(requestsAfterDefaultScan);
+  }).pipe(Effect.provide(layer));
+});
+
+effectIt.effect("reuses a short-lived inspection until refresh is requested", () => {
+  let lsofRuns = 0;
+  const layer = layerWithLsofRun((input) => {
+    lsofRuns += 1;
+    return lsofOkRun(lsofListenerStdout)(input);
+  });
+
+  return Effect.gen(function* () {
+    const scanner = yield* PortScanner.PortDiscovery;
+    const first = yield* scanner.inspectListeners();
+    expect(first.available).toBe(true);
+    expect(first.listeners).toHaveLength(1);
+    yield* scanner.inspectListeners();
+    expect(lsofRuns).toBe(1);
+
+    // Past the short TTL a plain call re-probes.
+    yield* TestClock.adjust(Duration.millis(1_001));
+    const expired = yield* scanner.inspectListeners();
+    expect(expired.available).toBe(true);
+    expect(lsofRuns).toBe(2);
+
+    // An explicit refresh bypasses the cache immediately.
+    yield* scanner.inspectListeners({ refresh: true });
+    expect(lsofRuns).toBe(3);
+  }).pipe(Effect.provide(layer));
+});
+
+effectIt.effect("reports a first-ever probe failure as unavailable", () => {
+  const layer = layerProbeFailure(processProbeFailure);
+
+  return Effect.gen(function* () {
+    const scanner = yield* PortScanner.PortDiscovery;
+    expect(yield* scanner.inspectListeners()).toEqual({ listeners: [], available: false });
+  }).pipe(Effect.provide(layer));
+});
+
+effectIt.effect("a failed refresh after a nonempty success reports unavailable, not stale", () => {
+  let failing = false;
+  const layer = layerWithLsofRun((input) => {
+    if (!failing) return lsofOkRun(lsofListenerStdout)(input);
+    return processProbeFailure(input);
+  });
+
+  return Effect.gen(function* () {
+    const scanner = yield* PortScanner.PortDiscovery;
+    const ok = yield* scanner.inspectListeners();
+    expect(ok.available).toBe(true);
+    expect(ok.listeners).toHaveLength(1);
+
+    failing = true;
+    // A forced refresh must never quietly serve the stale list.
+    expect(yield* scanner.inspectListeners({ refresh: true })).toEqual({
+      listeners: [],
+      available: false,
+    });
+
+    // The failed refresh invalidated the cache: an immediate unforced call
+    // retries instead of resurrecting the stale available list.
+    expect(yield* scanner.inspectListeners()).toEqual({ listeners: [], available: false });
+  }).pipe(Effect.provide(layer));
+});
+
+effectIt.effect("a failed refresh after an empty success reports unavailable, not stale", () => {
+  let failing = false;
+  const layer = layerWithLsofRun((input) => {
+    if (!failing) return lsofOkRun("", ChildProcessSpawner.ExitCode(1))(input);
+    return processProbeFailure(input);
+  });
+
+  return Effect.gen(function* () {
+    const scanner = yield* PortScanner.PortDiscovery;
+    // lsof exit 1 with no output is a real, available empty list.
+    expect(yield* scanner.inspectListeners()).toEqual({ listeners: [], available: true });
+
+    failing = true;
+    expect(yield* scanner.inspectListeners({ refresh: true })).toEqual({
+      listeners: [],
+      available: false,
+    });
+    expect(yield* scanner.inspectListeners()).toEqual({ listeners: [], available: false });
+  }).pipe(Effect.provide(layer));
+});
+
+for (const [label, run] of [
+  ["a null lsof code", lsofRun(lsofListenerStdout, { code: null })],
+  [
+    "exit 1 with a stderr diagnostic",
+    lsofRun("", { code: ChildProcessSpawner.ExitCode(1), stderr: "lsof: WARNING" }),
+  ],
+] as const) {
+  effectIt.effect(`reports unavailable for ${label}`, () =>
+    Effect.gen(function* () {
+      const scanner = yield* PortScanner.PortDiscovery;
+      expect(yield* scanner.inspectListeners()).toEqual({ listeners: [], available: false });
+    }).pipe(Effect.provide(layerWithLsofRun(run))),
+  );
+}

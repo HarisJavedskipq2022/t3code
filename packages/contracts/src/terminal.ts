@@ -25,6 +25,13 @@ const TerminalEnvSchema = Schema.Record(TerminalEnvKeySchema, TerminalEnvValueSc
   Schema.isMaxProperties(128),
 );
 
+/**
+ * A command a terminal runs as its shell process. Bounded so a command cannot
+ * be smuggled through an unbounded payload; the shell receives it as its own
+ * `-c`/`-Command` argument, never typed into an interactive prompt.
+ */
+const TerminalCommandSchema = TrimmedNonEmptyStringSchema.check(Schema.isMaxLength(65_536));
+
 export const TerminalThreadInput = Schema.Struct({
   threadId: TrimmedNonEmptyStringSchema,
 });
@@ -45,6 +52,11 @@ export const TerminalOpenInput = Schema.Struct({
   rows: Schema.optional(TerminalRowsSchema),
   env: Schema.optional(TerminalEnvSchema),
   providerInstanceId: Schema.optional(ProviderInstanceId),
+  /**
+   * Run this command as the shell process instead of an interactive shell, for
+   * a long-running app service. The process exit code is the command's.
+   */
+  command: Schema.optional(TerminalCommandSchema),
 });
 export type TerminalOpenInput = typeof TerminalOpenInput.Type;
 
@@ -87,6 +99,8 @@ export const TerminalRestartInput = Schema.Struct({
   rows: TerminalRowsSchema,
   env: Schema.optional(TerminalEnvSchema),
   providerInstanceId: Schema.optional(ProviderInstanceId),
+  /** Command-mode restart. Omitted keeps the session's retained command. */
+  command: Schema.optional(TerminalCommandSchema),
 });
 export type TerminalRestartInput = typeof TerminalRestartInput.Type;
 
@@ -341,6 +355,19 @@ export class TerminalNotRunningError extends Schema.TaggedError<TerminalNotRunni
   }
 }
 
+export class TerminalStopError extends Schema.TaggedError<TerminalStopError>()(
+  "TerminalStopError",
+  {
+    threadId: Schema.String,
+    terminalId: Schema.String,
+    timeoutMs: Schema.Number,
+  },
+) {
+  override get message() {
+    return `Timed out after ${this.timeoutMs}ms waiting for terminal to stop for thread: ${this.threadId}, terminal: ${this.terminalId}`;
+  }
+}
+
 export class TerminalWriteError extends Schema.TaggedError<TerminalWriteError>()(
   "TerminalWriteError",
   {
@@ -378,6 +405,7 @@ export const TerminalError = Schema.Union([
   TerminalProviderInstanceNotFoundError,
   TerminalProviderEnvironmentError,
   TerminalNotRunningError,
+  TerminalStopError,
   TerminalWriteError,
   TerminalResizeError,
 ]);

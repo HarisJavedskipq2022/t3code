@@ -363,3 +363,136 @@ it.effect.each(["spawn", "interrupt"] as const)(
       assert.equal(nativeProcess._socket.listenerCount("ready_datapipe"), 0);
     }).pipe(Effect.provide(layerTest)),
 );
+
+const groupSpawnInput = {
+  shell: "/bin/zsh",
+  args: ["-c", "npm run dev"],
+  cwd: ".",
+  cols: 80,
+  rows: 24,
+  env: {},
+  signalProcessGroup: true,
+};
+
+it.effect("signals the owned process group for a command terminal on POSIX", () =>
+  Effect.gen(function* () {
+    const adapter = yield* PtyAdapter.PtyAdapter;
+    const ptyProcess = yield* adapter.spawn(groupSpawnInput);
+    const nativeProcess = spawn.mock.results.at(-1)!.value;
+    const killSpy = vi.spyOn(globalThis.process, "kill").mockImplementation(() => true);
+    try {
+      ptyProcess.kill("SIGTERM");
+      ptyProcess.kill("SIGKILL");
+      // -pid addresses the forkpty session/group the captured spawn PID leads.
+      assert.deepEqual(killSpy.mock.calls, [
+        [-42, "SIGTERM"],
+        [-42, "SIGKILL"],
+      ]);
+      assert.equal(nativeProcess.kill.mock.calls.length, 0);
+    } finally {
+      killSpy.mockRestore();
+    }
+  }).pipe(Effect.provide(layerTestFor("linux"))),
+);
+
+const errnoError = (code: string): NodeJS.ErrnoException =>
+  Object.assign(new Error(code), { code });
+
+it.effect("treats a missing owned group as already stopped without a fallback kill", () =>
+  Effect.gen(function* () {
+    const adapter = yield* PtyAdapter.PtyAdapter;
+    const ptyProcess = yield* adapter.spawn(groupSpawnInput);
+    const nativeProcess = spawn.mock.results.at(-1)!.value;
+    const killSpy = vi.spyOn(globalThis.process, "kill").mockImplementation(() => {
+      throw errnoError("ESRCH");
+    });
+    try {
+      ptyProcess.kill("SIGTERM");
+      assert.equal(killSpy.mock.calls.length, 1);
+      // ESRCH means the whole group is gone; never degrade to a single-PID kill.
+      assert.equal(nativeProcess.kill.mock.calls.length, 0);
+    } finally {
+      killSpy.mockRestore();
+    }
+  }).pipe(Effect.provide(layerTestFor("darwin"))),
+);
+
+it.effect("propagates a real owned-group signal failure", () =>
+  Effect.gen(function* () {
+    const adapter = yield* PtyAdapter.PtyAdapter;
+    const ptyProcess = yield* adapter.spawn(groupSpawnInput);
+    const nativeProcess = spawn.mock.results.at(-1)!.value;
+    const killSpy = vi.spyOn(globalThis.process, "kill").mockImplementation(() => {
+      throw errnoError("EACCES");
+    });
+    try {
+      assert.throws(() => ptyProcess.kill("SIGTERM"), /EACCES/);
+      assert.equal(nativeProcess.kill.mock.calls.length, 0);
+    } finally {
+      killSpy.mockRestore();
+    }
+  }).pipe(Effect.provide(layerTestFor("linux"))),
+);
+
+it.effect("skips the group signal when the captured PID is invalid", () =>
+  Effect.gen(function* () {
+    spawn.mockReturnValueOnce(makeNativeProcess(0));
+    const adapter = yield* PtyAdapter.PtyAdapter;
+    const ptyProcess = yield* adapter.spawn(groupSpawnInput);
+    const nativeProcess = spawn.mock.results.at(-1)!.value;
+    const killSpy = vi.spyOn(globalThis.process, "kill").mockImplementation(() => true);
+    try {
+      ptyProcess.kill("SIGTERM");
+      assert.equal(killSpy.mock.calls.length, 0);
+      assert.deepEqual(nativeProcess.kill.mock.calls, [["SIGTERM"]]);
+    } finally {
+      killSpy.mockRestore();
+    }
+  }).pipe(Effect.provide(layerTestFor("linux"))),
+);
+
+it.effect("reports owned-group liveness only for a group-signaled POSIX process", () =>
+  Effect.gen(function* () {
+    const adapter = yield* PtyAdapter.PtyAdapter;
+    const groupProcess = yield* adapter.spawn(groupSpawnInput);
+    const plainProcess = yield* adapter.spawn({
+      shell: "/bin/zsh",
+      cwd: ".",
+      cols: 80,
+      rows: 24,
+      env: {},
+    });
+    const aliveSpy = vi.spyOn(globalThis.process, "kill").mockImplementation(() => true);
+    try {
+      assert.isTrue(groupProcess.isProcessGroupAlive?.());
+    } finally {
+      aliveSpy.mockRestore();
+    }
+    assert.isFalse(plainProcess.isProcessGroupAlive?.());
+
+    const goneSpy = vi.spyOn(globalThis.process, "kill").mockImplementation(() => {
+      throw errnoError("ESRCH");
+    });
+    try {
+      assert.isFalse(groupProcess.isProcessGroupAlive?.());
+    } finally {
+      goneSpy.mockRestore();
+    }
+  }).pipe(Effect.provide(layerTestFor("linux"))),
+);
+
+it.effect("an untyped kill keeps node-pty semantics and Windows ignores the flag", () =>
+  Effect.gen(function* () {
+    const adapter = yield* PtyAdapter.PtyAdapter;
+    const ptyProcess = yield* adapter.spawn(groupSpawnInput);
+    const nativeProcess = spawn.mock.results.at(-1)!.value;
+    const killSpy = vi.spyOn(globalThis.process, "kill").mockImplementation(() => true);
+    try {
+      ptyProcess.kill("SIGTERM");
+      assert.equal(killSpy.mock.calls.length, 0);
+      assert.deepEqual(nativeProcess.kill.mock.calls, [[undefined]]);
+    } finally {
+      killSpy.mockRestore();
+    }
+  }).pipe(Effect.provide(layerTestFor("win32"))),
+);

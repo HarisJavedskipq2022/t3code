@@ -20,6 +20,7 @@ import {
   TerminalProviderEnvironmentError,
   TerminalResizeError,
   TerminalSessionLookupError,
+  TerminalStopError,
   TerminalWriteError,
   type TerminalAttachInput,
   type TerminalAttachStreamEvent,
@@ -49,6 +50,8 @@ import { mergePathEntries } from "@t3tools/shared/shell";
 import { acpRegistryManagedBinaryDirectories } from "@t3tools/provider-acp-registry/server";
 import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
 import * as DateTime from "effect/DateTime";
+import * as Deferred from "effect/Deferred";
+import * as Duration from "effect/Duration";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Base64Url from "effect/encoding/Base64Url";
@@ -92,6 +95,7 @@ export {
   TerminalProviderEnvironmentError,
   TerminalResizeError,
   TerminalSessionLookupError,
+  TerminalStopError,
   TerminalWriteError,
 };
 
@@ -102,6 +106,13 @@ const DEFAULT_PERSIST_DEBOUNCE_MS = 250;
 const DEFAULT_SUBPROCESS_POLL_INTERVAL_MS = 1_000;
 const MAX_SUBPROCESS_POLL_INTERVAL_MS = 60_000;
 const DEFAULT_PROCESS_KILL_GRACE_MS = 1_000;
+/**
+ * Bound on `stop`. Must outlast the SIGTERM->grace->SIGKILL escalation so a
+ * stubborn process still gets forced before the wait gives up.
+ */
+const DEFAULT_STOP_TIMEOUT_MS = 5_000;
+/** How often `stop` checks whether the command's process group has exited. */
+const STOP_GROUP_POLL_INTERVAL_MS = 50;
 const DEFAULT_MAX_RETAINED_INACTIVE_SESSIONS = 128;
 const DEFAULT_OPEN_COLS = 120;
 const DEFAULT_OPEN_ROWS = 30;
@@ -210,6 +221,18 @@ export class TerminalManager extends Context.Service<
     readonly close: (input: TerminalCloseInput) => Effect.Effect<void, TerminalError>;
 
     /**
+     * Stop a terminal's running process while keeping its session and history.
+     *
+     * Signals only the process the manager captured, waits for the real exit
+     * event, and fails with `TerminalStopError` when it does not exit within the
+     * bound. A timed-out stop leaves the session running so a retry can run.
+     */
+    readonly stop: (input: {
+      readonly threadId: string;
+      readonly terminalId: string;
+    }) => Effect.Effect<void, TerminalError>;
+
+    /**
      * Close a thread's terminals that wait at an idle shell prompt. A terminal
      * that runs a command stays open. When `terminalId` is set, only that
      * terminal is considered. Used when a thread settles and when a setup
@@ -286,6 +309,8 @@ interface TerminalSessionState {
   terminalId: string;
   cwd: string;
   worktreePath: string | null;
+  /** The command this session runs, or null for an interactive shell. */
+  command: string | null;
   status: TerminalSessionStatus;
   pid: number | null;
   history: BoundedTerminalHistory;
@@ -302,6 +327,12 @@ interface TerminalSessionState {
   cols: number;
   rows: number;
   process: PtyAdapter.PtyProcess | null;
+  /**
+   * A command terminal's captured process kept after the shell exits while its
+   * owned group still has members. A later stop signals/awaits this group; it
+   * is cleared once the group is gone.
+   */
+  retainedGroupProcess: PtyAdapter.PtyProcess | null;
   unsubscribeData: (() => void) | null;
   unsubscribeExit: (() => void) | null;
   hasRunningSubprocess: boolean;
@@ -337,6 +368,11 @@ type DrainProcessEventAction =
       sequence: number;
       exitCode: number | null;
       exitSignal: number | null;
+      /**
+       * Command terminals keep their kill escalation alive across the shell
+       * exit so the group SIGKILL still reaches descendants that outlive it.
+       */
+      keepEscalation: boolean;
     };
 
 interface TerminalManagerState {
@@ -546,6 +582,34 @@ function shellCandidateFromCommand(
     return { shell: command, args: ["-o", "nopromptsp"] };
   }
   return { shell: command };
+}
+
+/**
+ * Shell-specific command-mode arguments for a resolved candidate. The command
+ * runs as the shell's own process, so the PTY exit code is the command's. The
+ * arguments append to the candidate's interactive ones (e.g. zsh prompt setup).
+ */
+function commandArgsForShell(
+  candidate: ShellCandidate,
+  command: string,
+  platform: NodeJS.Platform,
+): string[] {
+  const base = candidate.args ?? [];
+  if (platform === "win32") {
+    const name = basenameForPlatform(candidate.shell, platform).toLowerCase();
+    if (name === "pwsh.exe" || name === "powershell.exe") {
+      // Native `-Command` semantics: the process exit code is PowerShell's own
+      // (a failed native command normalizes to 1). We surface that actual code
+      // rather than wrap the command and guess at `$LASTEXITCODE`.
+      return [...base, "-Command", command];
+    }
+    if (name === "cmd.exe" || name === "cmd") {
+      return [...base, "/d", "/s", "/c", command];
+    }
+  }
+  // POSIX shells and fish take the command as one `-c` argument; so does any
+  // Windows shell without a more specific form.
+  return [...base, "-c", command];
 }
 
 function windowsSystemRoot(env: NodeJS.ProcessEnv): string {
@@ -1383,6 +1447,8 @@ interface TerminalManagerOptions {
   >;
   subprocessPollIntervalMs?: number;
   processKillGraceMs?: number;
+  /** Bound on `stop`; must outlast the kill escalation. */
+  stopTimeoutMs?: number;
   maxRetainedInactiveSessions?: number;
   registerTerminalProcesses?: (input: {
     readonly threadId: string;
@@ -1577,6 +1643,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
   const subprocessPollIntervalMs =
     options.subprocessPollIntervalMs ?? DEFAULT_SUBPROCESS_POLL_INTERVAL_MS;
   const processKillGraceMs = options.processKillGraceMs ?? DEFAULT_PROCESS_KILL_GRACE_MS;
+  const stopTimeoutMs = options.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS;
   const maxRetainedInactiveSessions =
     options.maxRetainedInactiveSessions ?? DEFAULT_MAX_RETAINED_INACTIVE_SESSIONS;
   const registerTerminalProcesses = options.registerTerminalProcesses ?? (() => Effect.void);
@@ -1710,6 +1777,9 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     threadId: string,
     terminalId: string,
   ) {
+    // Replace any escalation already running for this exact process so a retry
+    // (e.g. a second stop) cannot leave two conflicting fibers.
+    yield* clearKillFiber(process);
     const fiber = yield* runKillEscalation(process, threadId, terminalId).pipe(
       Effect.ensuring(
         modifyManagerState((state) => {
@@ -1992,7 +2062,9 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     function* () {
       yield* modifyManagerState((state) => {
         const inactiveSessions = [...state.sessions.values()].filter(
-          (session) => session.status !== "running",
+          // An exited command terminal can still own a live process group; keep
+          // it so a later stop does not report a false success.
+          (session) => session.status !== "running" && session.retainedGroupProcess === null,
         );
         if (inactiveSessions.length <= maxRetainedInactiveSessions) {
           return [undefined, state] as const;
@@ -2067,8 +2139,13 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
         }
 
         const process = session.process;
+        const keepEscalation = session.command !== null;
         cleanupProcessHandles(session);
         session.process = null;
+        // The shell exiting does not mean the command's group is gone: keep the
+        // captured handle so a later stop can signal/await the survivors.
+        session.retainedGroupProcess =
+          process !== null && process.isProcessGroupAlive?.() === true ? process : null;
         session.pid = null;
         session.hasRunningSubprocess = false;
         session.childCommandLabel = null;
@@ -2093,6 +2170,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
           sequence: eventStamp.sequence,
           exitCode: session.exitCode,
           exitSignal: session.exitSignal,
+          keepEscalation,
         } as const;
       });
 
@@ -2115,7 +2193,9 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
         continue;
       }
 
-      yield* clearKillFiber(action.process);
+      if (!action.keepEscalation) {
+        yield* clearKillFiber(action.process);
+      }
       yield* unregisterTerminal({
         threadId: action.threadId,
         terminalId: action.terminalId,
@@ -2134,7 +2214,9 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
   });
 
   const stopProcess = Effect.fn("terminal.stopProcess")(function* (session: TerminalSessionState) {
-    const process = session.process;
+    // Fire-and-forget stop: also signal a surviving owned group left by an
+    // earlier command exit, not just the live shell.
+    const process = session.process ?? session.retainedGroupProcess;
     if (!process) return;
 
     const updatedAt = yield* nowIso;
@@ -2191,9 +2273,13 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
       );
     }
 
+    const candidateArgs =
+      session.command === null
+        ? (candidate.args ?? [])
+        : commandArgsForShell(candidate, session.command, platform);
     const launch = yield* agentScope.wrap({
       command: candidate.shell,
-      args: candidate.args ?? [],
+      args: candidateArgs,
       name: "terminal",
       env: spawnEnv,
     });
@@ -2205,6 +2291,9 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
         cols: session.cols,
         rows: session.rows,
         env: spawnEnv,
+        // Command terminals signal their owned process group so a stop reaches
+        // descendants the command spawned; ordinary shells keep per-PID kill.
+        ...(session.command !== null ? { signalProcessGroup: true } : {}),
       }),
     );
 
@@ -2493,7 +2582,12 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
       yield* registerTerminalProcesses({
         threadId: session.threadId,
         terminalId: session.terminalId,
-        processIds: next.processIds,
+        // A command terminal's shell usually execs the command, so the terminal
+        // process is the server itself and has no children to report.
+        processIds:
+          next.processIds.length === 0 && session.command !== null
+            ? [terminalPid]
+            : next.processIds,
       });
       const nextChildLabel = next.hasRunningSubprocess ? next.childCommand : null;
       const event = yield* modifyManagerState((state) => {
@@ -2586,9 +2680,11 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
         session: TerminalSessionState,
       ) {
         cleanupProcessHandles(session);
-        if (!session.process) return;
-        yield* clearKillFiber(session.process);
-        yield* runKillEscalation(session.process, session.threadId, session.terminalId);
+        // Signal a live shell or a surviving owned group from a command exit.
+        const process = session.process ?? session.retainedGroupProcess;
+        if (!process) return;
+        yield* clearKillFiber(process);
+        yield* runKillEscalation(process, session.threadId, session.terminalId);
       });
 
       yield* Effect.forEach(sessions, cleanupSession, {
@@ -2602,11 +2698,10 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     input: TerminalOpenInput,
   ) {
     const terminalId = input.terminalId;
-    yield* assertValidCwd(input.cwd);
-
     const sessionKey = toSessionKey(input.threadId, terminalId);
     const existing = yield* getSession(input.threadId, terminalId);
     if (Option.isNone(existing)) {
+      yield* assertValidCwd(input.cwd);
       yield* flushPersist(input.threadId, terminalId);
       const history = yield* readHistory(input.threadId, terminalId);
       const cols = input.cols ?? DEFAULT_OPEN_COLS;
@@ -2616,6 +2711,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
         terminalId,
         cwd: input.cwd,
         worktreePath: input.worktreePath ?? null,
+        command: input.command ?? null,
         status: "starting",
         pid: null,
         history,
@@ -2631,6 +2727,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
         cols,
         rows,
         process: null,
+        retainedGroupProcess: null,
         unsubscribeData: null,
         unsubscribeExit: null,
         hasRunningSubprocess: false,
@@ -2663,6 +2760,25 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     }
 
     const liveSession = existing.value;
+
+    // A live command terminal has an immutable launch context: re-opening it —
+    // an observer may pass the default cwd or omit the original env — must not
+    // re-run the command. Only an explicit restart changes its launch context.
+    if (liveSession.command !== null && liveSession.status === "running" && liveSession.process) {
+      const commandCols = input.cols ?? liveSession.cols;
+      const commandRows = input.rows ?? liveSession.rows;
+      if (liveSession.cols !== commandCols || liveSession.rows !== commandRows) {
+        yield* resizePtyProcess(liveSession, liveSession.process, commandCols, commandRows);
+        liveSession.cols = commandCols;
+        liveSession.rows = commandRows;
+        liveSession.updatedAt = yield* nowIso;
+      }
+      return snapshot(liveSession);
+    }
+
+    // Every other path compares launch context against a validated cwd.
+    yield* assertValidCwd(input.cwd);
+
     const nextRuntimeEnv = normalizedRuntimeEnv(input.env);
     const currentRuntimeEnv = liveSession.runtimeEnv;
     const targetCols = input.cols ?? liveSession.cols;
@@ -2670,16 +2786,21 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     const runtimeEnvChanged = !Equal.equals(currentRuntimeEnv, nextRuntimeEnv);
     const nextWorktreePath =
       input.worktreePath !== undefined ? (input.worktreePath ?? null) : liveSession.worktreePath;
+    // An omitted command preserves the session's retained command: opening a
+    // running command terminal again must not re-run or downgrade it to a shell.
+    const requestedCommand = input.command !== undefined ? input.command : liveSession.command;
     const launchContextChanged =
       liveSession.cwd !== input.cwd ||
       runtimeEnvChanged ||
-      liveSession.worktreePath !== nextWorktreePath;
+      liveSession.worktreePath !== nextWorktreePath ||
+      requestedCommand !== liveSession.command;
 
     if (launchContextChanged) {
       yield* stopProcess(liveSession);
       liveSession.cwd = input.cwd;
       liveSession.worktreePath = nextWorktreePath;
       liveSession.runtimeEnv = nextRuntimeEnv;
+      liveSession.command = requestedCommand;
       liveSession.history.clear();
       liveSession.pendingHistoryControlSequence = "";
       liveSession.pendingProcessEvents = [];
@@ -2698,6 +2819,11 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     }
 
     if (!liveSession.process) {
+      // An exited command session may still own a live process group; reap it
+      // before running the command again so a replacement never overlaps it.
+      if (liveSession.command !== null) {
+        yield* stopLocked({ threadId: input.threadId, terminalId });
+      }
       yield* startSession(
         liveSession,
         {
@@ -3056,6 +3182,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
           terminalId,
           cwd: input.cwd,
           worktreePath: input.worktreePath ?? null,
+          command: input.command ?? null,
           status: "starting",
           pid: null,
           history: new BoundedTerminalHistory(historyLineLimit, "", historyByteLimit),
@@ -3071,6 +3198,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
           cols,
           rows,
           process: null,
+          retainedGroupProcess: null,
           unsubscribeData: null,
           unsubscribeExit: null,
           hasRunningSubprocess: false,
@@ -3086,10 +3214,17 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
         yield* evictInactiveSessionsIfNeeded();
       } else {
         session = existingSession.value;
-        yield* stopProcess(session);
+        // An explicit command restart awaits the old process/group before it
+        // spawns a replacement; ordinary shells keep the immediate reset.
+        if (session.command !== null) {
+          yield* stopLocked({ threadId: input.threadId, terminalId });
+        } else {
+          yield* stopProcess(session);
+        }
         session.cwd = input.cwd;
         session.worktreePath = input.worktreePath ?? null;
         session.runtimeEnv = normalizedRuntimeEnv(input.env);
+        session.command = input.command ?? session.command;
       }
 
       const cols = input.cols ?? session.cols;
@@ -3160,6 +3295,9 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
           (session): session is TerminalSessionState & { pid: number } =>
             session.status === "running" &&
             Number.isInteger(session.pid) &&
+            // A command terminal runs the command as its own process, so
+            // subprocess polling cannot see it; it is never treated as idle.
+            session.command === null &&
             (input.terminalId === undefined || session.terminalId === input.terminalId),
         );
         if (running.length === 0) return;
@@ -3198,6 +3336,86 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
       ),
     );
 
+  /**
+   * Stop whatever process/group this session currently owns, without taking the
+   * thread lock (callers already hold it). Waits for the shell exit and, for a
+   * group-signaled command terminal, for the owned group to disappear.
+   */
+  const stopLocked = Effect.fn("terminal.stopLocked")(function* (input: {
+    readonly threadId: string;
+    readonly terminalId: string;
+  }): Effect.fn.Return<void, TerminalStopError> {
+    const sessionOption = yield* getSession(input.threadId, input.terminalId);
+    if (Option.isNone(sessionOption)) return;
+    const session = sessionOption.value;
+    // A running process takes precedence; otherwise a retained group handle left
+    // by an earlier stop that timed out (the shell already exited).
+    const liveProcess = session.status === "running" ? session.process : null;
+    const target = liveProcess ?? session.retainedGroupProcess;
+    if (target === null) return;
+    // Only a still-running shell emits an exit event; a retained group is
+    // signalled and polled directly without waiting for an exit that happened.
+    const awaitExit = liveProcess !== null;
+
+    const exited = yield* Deferred.make<void>();
+    const waitForTarget = Effect.gen(function* () {
+      // Never touch a newer process than the one this stop captured.
+      const current = yield* getSession(input.threadId, input.terminalId);
+      if (
+        Option.isNone(current) ||
+        (current.value.process !== target && current.value.retainedGroupProcess !== target)
+      ) {
+        return;
+      }
+      yield* startKillEscalation(target, input.threadId, input.terminalId);
+      // Only await the exit while this exact shell is still the running process.
+      // If it already exited (target is now the retained group), the exit event
+      // has fired and must not be waited on again.
+      if (current.value.process === target) {
+        yield* Deferred.await(exited);
+      }
+      while (target.isProcessGroupAlive?.() === true) {
+        yield* Effect.sleep(Duration.millis(STOP_GROUP_POLL_INTERVAL_MS));
+      }
+    });
+
+    // acquireUseRelease removes the exit listener on normal return, timeout,
+    // interruption or defect, so repeated stops cannot leave it behind.
+    const waited = yield* Effect.acquireUseRelease(
+      awaitExit
+        ? subscribe((event) =>
+            event.threadId === input.threadId &&
+            event.terminalId === input.terminalId &&
+            event.type === "exited"
+              ? Deferred.succeed(exited, undefined).pipe(Effect.asVoid)
+              : Effect.void,
+          )
+        : Effect.succeed<() => void>(() => {}),
+      () => waitForTarget,
+      (unsubscribe) => Effect.sync(unsubscribe),
+    ).pipe(Effect.timeoutOption(Duration.millis(stopTimeoutMs)));
+
+    if (Option.isNone(waited)) {
+      return yield* new TerminalStopError({
+        threadId: input.threadId,
+        terminalId: input.terminalId,
+        timeoutMs: stopTimeoutMs,
+      });
+    }
+    // Group gone: drop the retained handle for this exact generation.
+    yield* modifyManagerState((state) => {
+      const live = state.sessions.get(toSessionKey(input.threadId, input.terminalId));
+      if (!live || live.retainedGroupProcess !== target) {
+        return [undefined, state] as const;
+      }
+      live.retainedGroupProcess = null;
+      return [undefined, state] as const;
+    });
+  });
+
+  const stop: TerminalManager["Service"]["stop"] = (input) =>
+    withThreadLock(input.threadId, stopLocked(input));
+
   return TerminalManager.of({
     open,
     attachStream,
@@ -3207,6 +3425,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     clear,
     restart,
     close,
+    stop,
     closeIdle,
     subscribe,
     subscribeMetadata,

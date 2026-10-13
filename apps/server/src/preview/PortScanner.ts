@@ -44,12 +44,36 @@ import { FetchHttpClient, HttpClient } from "effect/http";
 
 import * as ProcessRunner from "../processRunner.ts";
 
+/** Raw TCP listeners plus whether the OS probe actually ran. */
+export interface PortListenerInspection {
+  readonly listeners: ReadonlyArray<DiscoveredLocalServer>;
+  /**
+   * False when the probe could not run or failed, so an empty `listeners` means
+   * "unknown", not "no ports are in use". Callers doing conflict checks must
+   * treat an unavailable result as unknown rather than free.
+   */
+  readonly available: boolean;
+}
+
 export class PortDiscovery extends Context.Service<
   PortDiscovery,
   {
+    /**
+     * HTML-verified browser URLs for the preview panel. Forgiving: a failed
+     * process probe yields no URLs rather than an error.
+     */
     readonly scan: (
       configuredUrls?: ReadonlyArray<string>,
     ) => Effect.Effect<ReadonlyArray<DiscoveredLocalServer>>;
+    /**
+     * Raw TCP listeners (owned or not) for conflict checks and non-HTML APIs,
+     * without HTTP probing. Short-lived cached; pass `refresh` before a
+     * start/restart to bypass the cache. Never returns stale listeners as a
+     * fresh success: a failed probe is `{ listeners: [], available: false }`.
+     */
+    readonly inspectListeners: (input?: {
+      readonly refresh?: boolean;
+    }) => Effect.Effect<PortListenerInspection>;
     readonly subscribe: (
       input: {
         readonly configuredUrls: ReadonlyArray<string>;
@@ -81,6 +105,22 @@ const WEB_PROBE_TIMEOUT = Duration.seconds(1);
 const WEB_PROBE_CACHE_TTL_MS = Duration.toMillis(Duration.seconds(15));
 const WEB_PROBE_CONCURRENCY = 16;
 const NAVIGATION_REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+/**
+ * How long a raw-listener scan is reused. Short so a port that just opened or
+ * closed is seen quickly; callers about to start/restart pass `refresh` so a
+ * new listener is never missed within the window.
+ */
+const LISTENER_SCAN_CACHE_TTL_MS = 1_000;
+
+/** Raw TCP listeners plus whether the process probe actually ran. */
+interface RawListenerScan {
+  readonly listeners: ReadonlyArray<DiscoveredLocalServer>;
+  /**
+   * True when the OS probe failed and no fallback could list sockets, so an
+   * empty `listeners` means "unknown", not "no ports are in use".
+   */
+  readonly probeFailed: boolean;
+}
 
 type Listener = (servers: ReadonlyArray<DiscoveredLocalServer>) => Effect.Effect<void>;
 
@@ -364,6 +404,11 @@ export const make = Effect.gen(function* PortDiscoveryMake() {
   >(new Map());
   /** Fd walks that found no owner, per socket inode; retried up to `SOCKET_OWNER_ATTEMPTS`. */
   const socketOwnerMissesRef = yield* Ref.make<ReadonlyMap<string, number>>(new Map());
+  /** Last successful raw-listener scan, reused briefly by `inspectListeners`. */
+  const rawListenerCacheRef = yield* Ref.make<{
+    readonly listeners: ReadonlyArray<DiscoveredLocalServer>;
+    readonly scannedAtMillis: number;
+  } | null>(null);
 
   /** Maps socket inodes to the processes holding them, by `/proc/<pid>/fd`. */
   const findSocketOwners = Effect.fn("PortDiscovery.findSocketOwners")(function* (
@@ -612,21 +657,32 @@ export const make = Effect.gen(function* PortDiscoveryMake() {
         platform: hostPlatform,
       }).pipe(Effect.as(null));
 
-  const scanUnlocked = Effect.fn("PortDiscovery.scanUnlocked")(function* (
-    configuredUrls: ReadonlyArray<string>,
-  ) {
-    const state = yield* Ref.get(stateRef);
-    const terminalByProcessId = new Map<number, TerminalProcessOwner>();
-    for (const registration of state.terminalProcesses.values()) {
-      for (const processId of registration.processIds) {
-        terminalByProcessId.set(processId, registration.owner);
+  const readTerminalProcessOwners = Effect.fn("PortDiscovery.readTerminalProcessOwners")(
+    function* () {
+      const state = yield* Ref.get(stateRef);
+      const terminalByProcessId = new Map<number, TerminalProcessOwner>();
+      for (const registration of state.terminalProcesses.values()) {
+        for (const processId of registration.processIds) {
+          terminalByProcessId.set(processId, registration.owner);
+        }
       }
-    }
+      return terminalByProcessId;
+    },
+  );
+
+  /**
+   * The raw TCP listeners from the OS probe (Windows, `lsof`, then `/proc`).
+   * `probeFailed` distinguishes "the probe could not run" from a real empty
+   * list, so callers never treat a failed scan as "no ports are in use".
+   */
+  const discoverRawListeners = Effect.fn("PortDiscovery.discoverRawListeners")(function* (
+    terminalByProcessId: ReadonlyMap<number, TerminalProcessOwner>,
+  ): Effect.fn.Return<RawListenerScan> {
     if (hostPlatform === "win32") {
       const recoverWindowsProbeFailure = recoverProcessProbeFailure("windows-listeners");
       const command =
         'Get-NetTCPConnection -State Listen -ErrorAction Stop | ForEach-Object { $processName = (Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue).ProcessName; Write-Output "$($_.LocalAddress)|$($_.LocalPort)|$($_.OwningProcess)|$processName" }';
-      const listeners = yield* processRunner
+      const result = yield* processRunner
         .run({
           command: "powershell.exe",
           args: ["-NoProfile", "-NonInteractive", "-Command", command],
@@ -634,7 +690,16 @@ export const make = Effect.gen(function* PortDiscoveryMake() {
           maxOutputBytes: 1024 * 1024,
         })
         .pipe(
-          Effect.map((result) => parseWindowsListenerOutput(result.stdout, terminalByProcessId)),
+          Effect.map((run): RawListenerScan | null =>
+            // A non-zero PowerShell exit or truncated output means the probe
+            // could not enumerate listeners; never read that as "none".
+            run.code === 0 && !run.timedOut && !run.stdoutTruncated
+              ? {
+                  listeners: parseWindowsListenerOutput(run.stdout, terminalByProcessId),
+                  probeFailed: false,
+                }
+              : null,
+          ),
           Effect.catchTags({
             ProcessSpawnError: recoverWindowsProbeFailure,
             ProcessStdinError: recoverWindowsProbeFailure,
@@ -643,13 +708,12 @@ export const make = Effect.gen(function* PortDiscoveryMake() {
             ProcessTimeoutError: recoverWindowsProbeFailure,
           }),
         );
-      if (listeners !== null) return yield* probeWebServers(listeners, configuredUrls);
-      return yield* probeWebServers([], configuredUrls);
+      return result ?? { listeners: [], probeFailed: true };
     }
     const recoverLsofProbeFailure = recoverProcessProbeFailure("lsof");
     if (yield* Ref.get(lsofMissingRef)) {
       const fromProc = yield* scanProcListeners(terminalByProcessId);
-      return yield* probeWebServers(fromProc ?? [], configuredUrls);
+      return { listeners: fromProc ?? [], probeFailed: fromProc === null };
     }
     const lsofResult = yield* processRunner
       .run({
@@ -660,7 +724,20 @@ export const make = Effect.gen(function* PortDiscoveryMake() {
         maxOutputBytes: 1024 * 1024,
       })
       .pipe(
-        Effect.map((result) => parseLsofOutput(result.stdout, terminalByProcessId)),
+        Effect.map((run): RawListenerScan | null => {
+          if (run.timedOut || run.stdoutTruncated) return null;
+          // `lsof` exits 1 with no output and no diagnostic when nothing
+          // matches: a real empty list. Any other exit (or a null code, which
+          // is not a normal exit) falls back to `/proc` or reports unavailable.
+          if (run.code === 1 && run.stdout.trim().length === 0 && run.stderr.trim().length === 0) {
+            return { listeners: [], probeFailed: false };
+          }
+          if (run.code !== 0) return null;
+          return {
+            listeners: parseLsofOutput(run.stdout, terminalByProcessId),
+            probeFailed: false,
+          };
+        }),
         Effect.catchTags({
           // A missing lsof stays missing; later scans skip straight to the fallback.
           ProcessSpawnError: (error) =>
@@ -673,10 +750,45 @@ export const make = Effect.gen(function* PortDiscoveryMake() {
           ProcessTimeoutError: recoverLsofProbeFailure,
         }),
       );
-    if (lsofResult !== null) return yield* probeWebServers(lsofResult, configuredUrls);
+    if (lsofResult !== null) return lsofResult;
     const fromProc = yield* scanProcListeners(terminalByProcessId);
-    return yield* probeWebServers(fromProc ?? [], configuredUrls);
+    return { listeners: fromProc ?? [], probeFailed: fromProc === null };
   });
+
+  const scanUnlocked = Effect.fn("PortDiscovery.scanUnlocked")(function* (
+    configuredUrls: ReadonlyArray<string>,
+  ) {
+    const terminalByProcessId = yield* readTerminalProcessOwners();
+    const raw = yield* discoverRawListeners(terminalByProcessId);
+    return yield* probeWebServers(raw.listeners, configuredUrls);
+  });
+
+  const scanRawListeners = Effect.fn("PortDiscovery.scanRawListeners")(function* (
+    refresh: boolean,
+  ): Effect.fn.Return<PortListenerInspection> {
+    const cached = yield* Ref.get(rawListenerCacheRef);
+    if (!refresh && cached !== null) {
+      const now = yield* Clock.currentTimeMillis;
+      if (now - cached.scannedAtMillis < LISTENER_SCAN_CACHE_TTL_MS) {
+        return { listeners: cached.listeners, available: true };
+      }
+    }
+
+    const terminalByProcessId = yield* readTerminalProcessOwners();
+    const raw = yield* discoverRawListeners(terminalByProcessId);
+    if (raw.probeFailed) {
+      // A failed probe is unavailable, never a stale success. Invalidate the
+      // cache so an immediate unforced call cannot resurrect the last success.
+      yield* Ref.set(rawListenerCacheRef, null);
+      return { listeners: [], available: false };
+    }
+    const scannedAtMillis = yield* Clock.currentTimeMillis;
+    yield* Ref.set(rawListenerCacheRef, { listeners: raw.listeners, scannedAtMillis });
+    return { listeners: raw.listeners, available: true };
+  });
+
+  const scanRawSnapshot = (refresh: boolean) =>
+    scanSemaphore.withPermits(1)(scanRawListeners(refresh));
 
   const scanSnapshot = Effect.fn("PortDiscovery.scanSnapshot")(
     (configuredUrls: ReadonlyArray<string>) =>
@@ -689,6 +801,9 @@ export const make = Effect.gen(function* PortDiscoveryMake() {
       Effect.map((snapshot) => projectWebProbeSnapshot(snapshot, normalized)),
     );
   };
+
+  const inspectListeners: PortDiscovery["Service"]["inspectListeners"] = (input) =>
+    scanRawSnapshot(input?.refresh === true);
 
   const pollTick = Effect.fn("PortDiscovery.pollTick")(
     function* () {
@@ -799,6 +914,7 @@ export const make = Effect.gen(function* PortDiscoveryMake() {
 
   return PortDiscovery.of({
     scan: scanOnce,
+    inspectListeners,
     subscribe,
     retain,
     registerTerminalProcesses,

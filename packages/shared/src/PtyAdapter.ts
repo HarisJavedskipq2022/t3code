@@ -39,6 +39,12 @@ export interface PtyProcess {
   write(data: string): void;
   resize(cols: number, rows: number): void;
   kill(signal?: string): void;
+  /**
+   * Whether the PTY's owned process group still has members, for a process
+   * spawned with `signalProcessGroup`. Optional: an adapter without a group
+   * concept omits it, and callers then rely on the shell exit alone.
+   */
+  isProcessGroupAlive?(): boolean;
   onData(callback: (data: string) => void): () => void;
   onExit(callback: (event: PtyExitEvent) => void): () => void;
 }
@@ -50,6 +56,13 @@ export interface PtySpawnInput {
   cols: number;
   rows: number;
   env: NodeJS.ProcessEnv;
+  /**
+   * Signal the PTY's own process group (the forkpty session leader and its
+   * descendants) rather than only the shell PID. Set for command terminals so
+   * a stop reaches the server a command spawned; ordinary interactive shells
+   * leave it unset.
+   */
+  signalProcessGroup?: boolean;
 }
 
 /**
