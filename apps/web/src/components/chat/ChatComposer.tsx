@@ -141,7 +141,7 @@ import {
   type ComposerTaskStep,
   type ComposerTasksProgress,
 } from "./ComposerTasksBadge";
-import { ComposerActivityRow } from "./ComposerActivityStatus";
+import { ComposerActivityRow, ComposerWorkingRow } from "./ComposerActivityStatus";
 import {
   reconcileAttachmentContextReferences,
   type RetainedAttachmentContextPayloads,
@@ -1562,6 +1562,8 @@ export interface ChatComposerProps {
   sendDisabledReason: string | null;
   isPreparingWorktree: boolean;
   bannerItems: readonly ComposerBannerStackItem[];
+  /** What the agent is doing while a turn runs; null when it is idle. */
+  workingStatus?: { readonly step: string; readonly startedAt: string | null } | null;
   /** Tokens a stale session would re-read; null when the thread is not offered compaction. */
   resumeCompactionTokens: number | null;
   /** The Compact chip is off, so the next send keeps full history. */
@@ -5723,6 +5725,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     activeTasksProgress !== null &&
     activeTaskSteps !== null &&
     activeTasksProgress.totalSteps > 0;
+  // An agent waiting on an approval or an answer is not working; the drawer says so.
+  const workingStatus = hasBlockingComposerTopDrawer ? null : (props.workingStatus ?? null);
+  const workingRow = workingStatus ? (
+    <ComposerWorkingRow step={workingStatus.step} startedAt={workingStatus.startedAt} />
+  ) : null;
   const activityStackContent = hasBannerItems ? (
     shownSyncPhase ? (
       <ComposerActivityRow phase={shownSyncPhase} />
@@ -5733,7 +5740,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         progress={activeTasksProgress}
         steps={activeTaskSteps}
       />
-    ) : null
+    ) : (
+      workingRow
+    )
   ) : null;
   const activityStackItem: ComposerBannerStackContent | null = activityStackContent
     ? {
@@ -6862,10 +6871,14 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
             items={bannerStackItems}
             attachedAbove={props.queuedRunsControl}
           />
-          {!activityStackItem && (shownSyncPhase || inlineTasksBadge) ? (
+          {!activityStackItem && (shownSyncPhase || inlineTasksBadge || workingRow) ? (
             <ComposerBanner.Attachment>
               <ComposerBanner.Root data-chat-composer-activity-strip="true">
-                {shownSyncPhase ? <ComposerActivityRow phase={shownSyncPhase} /> : inlineTasksBadge}
+                {shownSyncPhase ? (
+                  <ComposerActivityRow phase={shownSyncPhase} />
+                ) : (
+                  (inlineTasksBadge ?? workingRow)
+                )}
               </ComposerBanner.Root>
             </ComposerBanner.Attachment>
           ) : null}
@@ -7054,6 +7067,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               "rounded-3xl transition-[background-color] duration-200",
               "in-data-[thread-context-over]:bg-accent/45 in-data-[thread-context-over]:ring-1 in-data-[thread-context-over]:ring-inset in-data-[thread-context-over]:ring-primary/70",
               isDragOverComposer ? "bg-accent/45 ring-1 ring-inset ring-primary/70" : null,
+              // A static accent edge while the agent works; nothing animates.
+              workingStatus && !isDragOverComposer
+                ? "shadow-[0_0_20px_-8px] shadow-primary/60 ring-1 ring-inset ring-primary/45"
+                : null,
               projectSelectionRequired ? "opacity-75" : null,
               composerProviderState.composerSurfaceClassName,
             )}

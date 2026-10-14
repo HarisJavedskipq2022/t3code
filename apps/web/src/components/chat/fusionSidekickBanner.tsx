@@ -10,8 +10,8 @@ import { useThreadShell, useThreadVisibleTurnItems } from "~/state/entities";
 import { environmentThreadDetails } from "~/state/threads";
 import { Button } from "../ui/button";
 import type { ComposerBannerStackItem } from "./ComposerBannerStack";
+import { describeAgentStep } from "./agentStep.logic";
 import {
-  describeSidekickStep,
   resolveFusionSidekickActivity,
   runningSidekickCommandMinutes,
   SIDEKICK_STALL_MINUTES,
@@ -61,7 +61,7 @@ export function useFusionSidekickBanner(input: {
   const kind = activity?.kind ?? null;
   // Only a working sidekick's thread is read, and only while the lead's thread is open.
   const items = useThreadVisibleTurnItems(kind === "working" ? childRef : null);
-  const step = describeSidekickStep(items);
+  const step = describeAgentStep(items);
   // A minute clock is enough to spot a hang without repainting every second.
   const commandMinutes = runningSidekickCommandMinutes(items, Date.parse(`${useNowMinute()}Z`));
   const stalled = commandMinutes !== null && commandMinutes >= SIDEKICK_STALL_MINUTES;

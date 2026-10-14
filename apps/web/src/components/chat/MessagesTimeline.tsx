@@ -3587,7 +3587,7 @@ function formatWorkingTimerNow(startIso: string): string {
   return formatWorkingTimer(startIso, new Date().toISOString()) ?? "0s";
 }
 
-function WorkingTimer({ createdAt }: { createdAt: string }) {
+export function WorkingTimer({ createdAt }: { createdAt: string }) {
   const textRef = useRef<HTMLSpanElement>(null);
   const initialText = formatWorkingTimerNow(createdAt);
 

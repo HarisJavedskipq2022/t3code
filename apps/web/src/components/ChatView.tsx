@@ -120,6 +120,7 @@ import {
 } from "@t3tools/client-runtime/state/threads";
 import { resolveThreadLastVisitedAt } from "./Sidebar.logic";
 import { useFusionSidekickBanner } from "./chat/fusionSidekickBanner";
+import { describeAgentStep } from "./chat/agentStep.logic";
 import { derivePendingThreadRequests } from "@t3tools/client-runtime/state/thread-requests";
 import {
   parseScopedThreadKey,
@@ -7497,6 +7498,18 @@ export default function ChatView(props: ChatViewProps) {
     },
     [environmentId, interruptThreadTurn],
   );
+  const activeRunId = activeActivityRun?.runId ?? null;
+  const activeRunStep =
+    activeRunId === null ? null : describeAgentStep(serverVisibleTurnItems ?? [], activeRunId);
+  const workingStep = isPreparingWorktree
+    ? "Setting up worktree"
+    : isCompacting
+      ? "Compacting conversation"
+      : (activeRunStep ?? "Working");
+  const composerWorkingStatus = useMemo(
+    () => (isWorking ? { step: workingStep, startedAt: activeWorkStartedAt } : null),
+    [isWorking, workingStep, activeWorkStartedAt],
+  );
   const fusionSidekickBannerItem = useFusionSidekickBanner({
     // The guarded ref: subscribing to a draft before its thread exists caches "not found".
     threadRef: routeThreadDetailRef,
@@ -11885,6 +11898,9 @@ export default function ChatView(props: ChatViewProps) {
                               isPreparingWorktree={isPreparingWorktree && !sendQueuesBehindSetup}
                               queuedRunsControl={queuedRunsControl}
                               bannerItems={composerBannerItems}
+                              workingStatus={
+                                paintOnlyDisplayedTimeline ? null : composerWorkingStatus
+                              }
                               resumeCompactionTokens={resumeCompactionTokens}
                               keepFullHistory={keepFullHistory}
                               onToggleKeepFullHistory={toggleKeepFullHistory}
