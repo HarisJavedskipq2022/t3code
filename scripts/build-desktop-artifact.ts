@@ -950,7 +950,10 @@ interface StagePackageJson {
   readonly t3codeCommitHash: string;
   readonly t3codeWebAuthn?: MacWebAuthnEntitlements;
   /** Read by apps/desktop/src/boot.ts so a fork build keeps its own state. */
-  readonly t3codeFork?: DesktopForkIdentity["runtime"];
+  readonly t3codeFork?: DesktopForkIdentity["runtime"] & {
+    /** The building checkout's scripts/fork-sync.sh, run by the sidebar's nightly notice. */
+    readonly syncScript?: string;
+  };
   readonly private: true;
   readonly packageManager: string;
   readonly description: string;
@@ -3907,12 +3910,21 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
       ? path.join(stageAppDir, WINDOWS_SERVER_RESOURCE_SOURCE_DIR, WINDOWS_SERVER_ASAR_RESOURCE)
       : undefined;
   const fork = Option.getOrUndefined(yield* resolveDesktopForkIdentity);
+  const forkSyncScript = path.join(repoRoot, "scripts", "fork-sync.sh");
+  const hasForkSyncScript = fork !== undefined && (yield* fs.exists(forkSyncScript));
   const stagePackageJson: StagePackageJson = {
     name: "t3code",
     version: appVersion,
     buildVersion: appVersion,
     t3codeCommitHash: commitHash,
-    ...(fork ? { t3codeFork: fork.runtime } : {}),
+    ...(fork
+      ? {
+          t3codeFork: {
+            ...fork.runtime,
+            ...(hasForkSyncScript ? { syncScript: forkSyncScript } : {}),
+          },
+        }
+      : {}),
     // Read by apps/desktop/src/preview/Passkeys.ts; must match the signed entitlements.
     ...(macWebAuthn ? { t3codeWebAuthn: macWebAuthn } : {}),
     private: true,

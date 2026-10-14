@@ -13,7 +13,9 @@ require("./compileCache.cjs");
   const { app } = require("electron") as typeof import("electron");
   const packageJson = JSON.parse(
     NodeFS.readFileSync(NodePath.join(app.getAppPath(), "package.json"), "utf8"),
-  ) as { t3codeFork?: { home?: unknown; userDataName?: unknown; name?: unknown } };
+  ) as {
+    t3codeFork?: { home?: unknown; userDataName?: unknown; name?: unknown; syncScript?: unknown };
+  };
   const fork = packageJson.t3codeFork;
   if (typeof fork?.home === "string" && !process.env.T3CODE_HOME?.trim()) {
     process.env.T3CODE_HOME = NodePath.join(NodeOS.homedir(), fork.home);
@@ -23,6 +25,9 @@ require("./compileCache.cjs");
   }
   if (typeof fork?.name === "string") {
     process.env.T3CODE_DESKTOP_APP_NAME = fork.name;
+  }
+  if (typeof fork?.syncScript === "string") {
+    process.env.T3CODE_DESKTOP_FORK_SYNC_SCRIPT = fork.syncScript;
   }
 }
 

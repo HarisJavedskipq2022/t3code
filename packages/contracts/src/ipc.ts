@@ -339,6 +339,10 @@ export interface DesktopUpdateActionResult {
   state: DesktopUpdateState;
 }
 
+/** How a fork build's nightly sync ended; "unavailable" when the build has no sync script. */
+export const DesktopForkSyncResultSchema = Schema.Literals(["built", "failed", "unavailable"]);
+export type DesktopForkSyncResult = typeof DesktopForkSyncResultSchema.Type;
+
 export const DesktopUpdateActionResultSchema = Schema.Struct({
   accepted: Schema.Boolean,
   completed: Schema.Boolean,
@@ -1238,6 +1242,10 @@ export interface DesktopBridge {
   checkForUpdate: () => Promise<DesktopUpdateCheckResult>;
   downloadUpdate: () => Promise<DesktopUpdateActionResult>;
   installUpdate: () => Promise<DesktopUpdateActionResult>;
+  /** Fork builds only: merge, test and build the newest nightly with scripts/fork-sync.sh. */
+  runForkSync?: () => Promise<DesktopForkSyncResult>;
+  /** Fork builds only: quit so the waiting installer swaps in the synced build. */
+  quitToInstallForkSync?: () => Promise<void>;
   onUpdateState: (listener: (state: DesktopUpdateState) => void) => () => void;
   /** Settings → `t3` command. Optional: older desktop builds lack it. */
   cliCommand?: {

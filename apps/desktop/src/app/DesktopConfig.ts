@@ -42,6 +42,7 @@ export const DesktopConfig = Config.all({
   appUserModelIdOverride: trimmedString("T3CODE_DESKTOP_APP_USER_MODEL_ID"),
   userDataNameOverride: trimmedString("T3CODE_DESKTOP_USER_DATA_NAME"),
   appNameOverride: trimmedString("T3CODE_DESKTOP_APP_NAME"),
+  forkSyncScript: trimmedString("T3CODE_DESKTOP_FORK_SYNC_SCRIPT"),
   devRemoteT3ServerEntryPath: trimmedString("T3CODE_DEV_REMOTE_T3_SERVER_ENTRY_PATH"),
   configuredBackendPort: Config.Port("T3CODE_PORT").pipe(Config.option),
   commitHashOverride: trimmedString("T3CODE_COMMIT_HASH"),

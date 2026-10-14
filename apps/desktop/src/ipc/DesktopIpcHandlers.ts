@@ -76,6 +76,7 @@ import {
   takeLegacyLocalStorage,
 } from "./methods/legacyLocalStorage.ts";
 import { getWslState, setWslBackendEnabled, setWslDistro, setWslOnly } from "./methods/wsl.ts";
+import { quitToInstallForkSync, runForkSync } from "./methods/forkSync.ts";
 import {
   getCliCommandState,
   installCliCommand,
@@ -133,6 +134,9 @@ export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers"
   yield* ipc.handle(setServerExposureMode);
   yield* ipc.handle(setTailscaleServeEnabled);
   yield* ipc.handle(getAdvertisedEndpoints);
+
+  yield* ipc.handle(runForkSync);
+  yield* ipc.handle(quitToInstallForkSync);
 
   yield* ipc.handle(getWslState);
   yield* ipc.handle(setWslBackendEnabled);

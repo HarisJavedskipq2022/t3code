@@ -123,3 +123,5 @@ export const RECEIVE_PROVIDER_AUTH_CALLBACK_CHANNEL = "desktop:receive-provider-
 export const CANCEL_PROVIDER_AUTH_CALLBACK_CHANNEL = "desktop:cancel-provider-auth-callback";
 export const TAKE_LEGACY_LOCAL_STORAGE_CHANNEL = "desktop:take-legacy-local-storage";
 export const COMPLETE_LEGACY_LOCAL_STORAGE_CHANNEL = "desktop:complete-legacy-local-storage";
+export const FORK_SYNC_RUN_CHANNEL = "desktop:fork-sync-run";
+export const FORK_SYNC_QUIT_TO_INSTALL_CHANNEL = "desktop:fork-sync-quit-to-install";
