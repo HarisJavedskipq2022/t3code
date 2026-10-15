@@ -4,6 +4,8 @@ import {
   type OrchestrationV2DomainEvent,
   type OrchestrationV2RuntimeRequest,
   type OrchestrationV2Subagent,
+  runtimeRequestBlocker,
+  runtimeRequestNeed,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -18,10 +20,10 @@ import * as Orchestrator from "./Orchestrator.ts";
 import * as ProjectionStore from "./ProjectionStore.ts";
 
 /**
- * Wakes the parent of an app-owned delegated task when the task asks a question. The question
- * blocks the task until someone answers it, and the user rarely watches child threads, so the
- * parent agent is told to answer it or to ask the user. Only questions are routed: approvals
- * cannot be answered through the pending request tools.
+ * Wakes the parent of an app-owned delegated task when the task asks a question or waits for an
+ * approval. Either blocks the task, and the user rarely watches child threads. The parent agent is
+ * told to answer a question or ask the user; an approval cannot be answered through the pending
+ * request tools, so the parent is told to send the user to the child thread instead.
  */
 export class DelegatedTaskQuestionReactor extends Context.Service<
   DelegatedTaskQuestionReactor,
@@ -42,20 +44,30 @@ const make = Effect.gen(function* () {
     if (task.childThreadId === null) return;
     const key = `${task.threadId}:${request.id}`;
     const label = reportLabel(task.title?.trim() || task.prompt);
-    const situation =
-      request.responseCapability.type === "message"
-        ? `Delegated task ${task.id} asked a question and is still working.`
-        : `Delegated task ${task.id} is blocked on a question and cannot continue until it is answered.`;
+    const name = `Delegated task${label === undefined ? "" : ` "${label}"`}`;
+    let text: string;
+    let summary: string;
+    if (request.kind === "user_input") {
+      const situation =
+        request.responseCapability.type === "message"
+          ? `Delegated task ${task.id} asked a question and is still working.`
+          : `Delegated task ${task.id} is blocked on a question and cannot continue until it is answered.`;
+      text = `${situation} Read it with t3_pending_request_read using threadId ${task.childThreadId} and requestId ${request.id}. Answer it with t3_pending_request_respond when the answer follows from the task or the user's instructions; otherwise ask the user, then answer it. If it is no longer pending, it was answered or dismissed.`;
+      summary = `${name} has a question`;
+    } else {
+      text = `Delegated task ${task.id} needs ${runtimeRequestNeed(request.kind)} and cannot continue until the user handles it. You cannot approve it. Tell the user the task is waiting on them and that they can approve or decline it in the task's thread (threadId ${task.childThreadId}). If it is no longer pending, it was handled.`;
+      summary = `${name} needs approval`;
+    }
     yield* engine.dispatch({
       type: "message.dispatch",
       commandId: CommandId.make(`server:delegated-task-question:${key}`),
       threadId: task.threadId,
       messageId: MessageId.make(`message:delegated-task-question:${key}`),
-      text: `${situation} Read it with t3_pending_request_read using threadId ${task.childThreadId} and requestId ${request.id}. Answer it with t3_pending_request_respond when the answer follows from the task or the user's instructions; otherwise ask the user, then answer it. If it is no longer pending, it was answered or dismissed.`,
+      text,
       notification: {
         source: { kind: "delegated_task", taskIds: [task.id], childThreadId: task.childThreadId },
         outcome: "updated",
-        summary: `Delegated task${label === undefined ? "" : ` "${label}"`} has a question`,
+        summary,
       },
       attachments: [],
       dispatchMode: { type: "queue_after_active" },
@@ -86,7 +98,7 @@ const make = Effect.gen(function* () {
           ]);
           for (const request of child.runtimeRequests) {
             if (
-              request.kind !== "user_input" ||
+              runtimeRequestBlocker(request.kind) === null ||
               request.status !== "pending" ||
               request.responseCapability.type !== "live"
             ) {
@@ -105,7 +117,10 @@ const make = Effect.gen(function* () {
         }
         return;
       }
-      if (event.type !== "runtime-request.updated" || event.payload.kind !== "user_input") {
+      if (
+        event.type !== "runtime-request.updated" ||
+        runtimeRequestBlocker(event.payload.kind) === null
+      ) {
         return;
       }
       const child = yield* projections.getThread(event.threadId);
@@ -148,8 +163,10 @@ const make = Effect.gen(function* () {
       ) {
         return;
       }
-      // A blocking delegate_task wait delivers the question itself.
+      // A blocking delegate_task wait delivers the question itself. It keeps waiting through an
+      // approval, so an approval still queues a notice, withdrawn if the user handles it first.
       if (
+        event.payload.kind === "user_input" &&
         task.completionWake === "settled_only" &&
         event.payload.responseCapability.type === "live" &&
         parent.runs.some(

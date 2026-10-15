@@ -38,6 +38,7 @@ export * from "./pullRequestReviewGuide.ts";
 export * from "./orchestrationDispatch.ts";
 export * from "./orchestrationProject.ts";
 export * from "./orchestrationV2.ts";
+export * from "./runtimeRequestBlocker.ts";
 export * from "./applicationEvent.ts";
 export * from "./orchestratorMcp.ts";
 export * from "./threadMetadataMcp.ts";

@@ -7510,15 +7510,24 @@ export default function ChatView(props: ChatViewProps) {
     () => (isWorking ? { step: workingStep, startedAt: activeWorkStartedAt } : null),
     [isWorking, workingStep, activeWorkStartedAt],
   );
-  const fusionSidekickBannerItem = useFusionSidekickBanner({
-    // The guarded ref: subscribing to a draft before its thread exists caches "not found".
-    threadRef: routeThreadDetailRef,
-    leadWorking: isWorking,
-    leadActivityStartedAt: activeThreadShell?.runtime?.activityStartedAt ?? null,
-    onOpenThread: onOpenRelatedThread,
-    onStopThread: onStopSidekick,
-  });
-  const childThreadInputs = useChildThreadInputs(activeThreadRef);
+  const { item: fusionSidekickBannerItem, blockedThreadId: blockedSidekickThreadId } =
+    useFusionSidekickBanner({
+      // The guarded ref: subscribing to a draft before its thread exists caches "not found".
+      threadRef: routeThreadDetailRef,
+      leadWorking: isWorking,
+      leadActivityStartedAt: activeThreadShell?.runtime?.activityStartedAt ?? null,
+      onOpenThread: onOpenRelatedThread,
+      onStopThread: onStopSidekick,
+    });
+  const allChildThreadInputs = useChildThreadInputs(activeThreadRef);
+  // The Fusion banner already shows its blocked sidekick's request.
+  const childThreadInputs = useMemo(
+    () =>
+      blockedSidekickThreadId === null
+        ? allChildThreadInputs
+        : allChildThreadInputs.filter((child) => child.id !== blockedSidekickThreadId),
+    [allChildThreadInputs, blockedSidekickThreadId],
+  );
   const childInputBannerItem = useMemo<ComposerBannerStackItem | null>(() => {
     const first = childThreadInputs[0];
     const parentAwaitingUser =

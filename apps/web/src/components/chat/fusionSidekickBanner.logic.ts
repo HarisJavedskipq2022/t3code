@@ -2,15 +2,17 @@ import {
   threadRuntimeIsActive,
   type EnvironmentThreadShell,
 } from "@t3tools/client-runtime/state/models";
-import type {
-  OrchestrationV2ProjectedTurnItem,
-  OrchestrationV2Subagent,
-  ThreadId,
+import {
+  type OrchestrationV2ProjectedTurnItem,
+  type OrchestrationV2Subagent,
+  runtimeRequestNeed,
+  type ThreadId,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 
 export type FusionSidekickActivity = Readonly<{
-  kind: "working" | "finished" | "stopped";
+  /** `approval` and `question`: the sidekick is blocked until the user handles it. */
+  kind: "working" | "approval" | "question" | "finished" | "stopped";
   childThreadId: ThreadId;
   title: string;
   /** Why a stopped sidekick stopped, when the provider said. */
@@ -23,7 +25,8 @@ const STOPPED_STATUSES = new Set(["failed", "cancelled", "interrupted"]);
  * What the composer says about a Fusion lead's sidekick, or null to stay out
  * of the way. It shows while the sidekick works and, once it settles, for the
  * rest of the lead turn it settled in, when the lead is reviewing its work.
- * Input requests are left to the child-input banner, which can answer them.
+ * A sidekick blocked on an approval or a question says so, since nothing
+ * moves until the user handles it.
  */
 export function resolveFusionSidekickActivity(input: {
   sidekick: Pick<OrchestrationV2Subagent, "childThreadId" | "status"> | null;
@@ -37,8 +40,12 @@ export function resolveFusionSidekickActivity(input: {
 }): FusionSidekickActivity | null {
   const { sidekick, child } = input;
   if (sidekick?.childThreadId == null || child === null) return null;
-  if (child.hasPendingApprovals || child.hasPendingUserInput) return null;
   const base = { childThreadId: sidekick.childThreadId, title: child.title, reason: null };
+  if (child.hasPendingApprovals || child.hasPendingUserInput) {
+    // A request left behind by a finished run no longer holds anything up.
+    if (!threadRuntimeIsActive(child.runtime)) return null;
+    return { ...base, kind: child.hasPendingApprovals ? "approval" : "question" };
+  }
   if (threadRuntimeIsActive(child.runtime)) return { ...base, kind: "working" };
 
   const { runtime } = child;
@@ -49,6 +56,29 @@ export function resolveFusionSidekickActivity(input: {
   return STOPPED_STATUSES.has(sidekick.status) || STOPPED_STATUSES.has(runtime.status)
     ? { ...base, kind: "stopped", reason: runtime.lastError }
     : { ...base, kind: "finished" };
+}
+
+/**
+ * What a blocked sidekick is waiting on, from its newest request of that kind:
+ * the command or prompt it wants approved, or the question it asked.
+ */
+export function describeSidekickBlocker(
+  items: ReadonlyArray<Pick<OrchestrationV2ProjectedTurnItem, "visibility" | "item">>,
+  blocker: "approval" | "question",
+): string | null {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const { item, visibility } = items[index]!;
+    if (visibility !== "local") continue;
+    if (blocker === "approval" && item.type === "approval_request") {
+      const need = runtimeRequestNeed(item.requestKind);
+      const detail = item.prompt?.trim().split("\n", 1)[0]?.trim() || item.appName;
+      return detail ? `Needs ${need}: ${detail}` : `Needs ${need}`;
+    }
+    if (blocker === "question" && item.type === "user_input_request" && !item.questionAnswer) {
+      return item.questions[0]?.question ?? null;
+    }
+  }
+  return null;
 }
 
 /** A sidekick command running this long is flagged as possibly stuck. */

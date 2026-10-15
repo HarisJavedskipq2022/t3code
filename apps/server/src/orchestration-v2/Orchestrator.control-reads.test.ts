@@ -803,7 +803,6 @@ it.effect("wakes the parent once when its delegated task asks a question", () =>
       ],
     });
     yield* reactor.handle(answered);
-    yield* reactor.handle(approval);
 
     const wakes = (yield* projections.getThreadProjection(parentThreadId)).messages.filter(
       (message) => message.notification !== undefined,
@@ -1022,5 +1021,122 @@ it.effect("wakes the parent once when its delegated task asks a question", () =>
       taskIds: [followup.delegatedTaskId],
       childThreadId: task.childThreadId!,
     });
+  }).pipe(Effect.provide(DelegatedTaskQuestionReactor.layer.pipe(Layer.provideMerge(layerTest)))),
+);
+
+it.effect("tells the parent a delegated task waits on the user's approval", () =>
+  Effect.gen(function* () {
+    const orchestrator = yield* Orchestrator.OrchestratorV2;
+    const projections = yield* ProjectionStore.ProjectionStoreV2;
+    const reactor = yield* DelegatedTaskQuestionReactor.DelegatedTaskQuestionReactor;
+    const eventSink = yield* EventSink.EventSinkV2;
+    const parentThreadId = ThreadId.make("thread:approval-parent");
+    yield* orchestrator.dispatch({
+      type: "thread.create",
+      commandId: CommandId.make("create-approval-parent"),
+      threadId: parentThreadId,
+      projectId: ProjectId.make("project:approval"),
+      title: "Parent",
+      modelSelection,
+      runtimeMode: "full-access",
+      interactionMode: "default",
+      branch: null,
+      worktreePath: null,
+      createdBy: "user",
+      creationSource: "web",
+    });
+    yield* orchestrator.dispatch({
+      type: "message.dispatch",
+      commandId: CommandId.make("start-approval-parent"),
+      threadId: parentThreadId,
+      messageId: MessageId.make("message:approval-parent"),
+      text: "Delegate the fix",
+      attachments: [],
+      dispatchMode: { type: "start_immediately" },
+      createdBy: "user",
+      creationSource: "web",
+    });
+    const parentRun = (yield* projections.getThreadProjection(parentThreadId)).runs[0]!;
+    // A blocking wait: the parent run is still running and the task wakes it only once settled.
+    yield* orchestrator.dispatch({
+      type: "delegated_task.request",
+      commandId: CommandId.make("delegate-approval-task"),
+      parentThreadId,
+      parentRunId: parentRun.id,
+      parentNodeId: parentRun.rootNodeId!,
+      task: "Fix the build",
+      completionWake: "settled_only",
+      modelSelection,
+      runtimeMode: "approval-required",
+      interactionMode: "default",
+      createdBy: "agent",
+      creationSource: "mcp",
+    });
+    const task = (yield* projections.getThreadProjection(parentThreadId)).subagents[0]!;
+    const childRun = (yield* projections.getThreadRecords(task.childThreadId!, ["runs"])).runs[0]!;
+    const now = yield* DateTime.now;
+    const requestEvent = (requestId: string, kind: "command" | "dynamic_tool_call") =>
+      ({
+        id: EventId.make(`event:${requestId}`),
+        type: "runtime-request.updated",
+        threadId: task.childThreadId!,
+        runId: childRun.id,
+        occurredAt: now,
+        payload: {
+          id: RuntimeRequestId.make(requestId),
+          nodeId: childRun.rootNodeId!,
+          providerTurnId: null,
+          nativeRequestRef: null,
+          kind,
+          status: "pending",
+          responseCapability: {
+            type: "live",
+            providerSessionId: ProviderSessionId.make("session:approval"),
+          },
+          createdAt: now,
+          resolvedAt: null,
+        },
+      }) satisfies OrchestrationV2DomainEvent;
+    const notices = () =>
+      projections
+        .getThreadProjection(parentThreadId)
+        .pipe(
+          Effect.map((projection) =>
+            projection.messages.filter((message) => message.notification !== undefined),
+          ),
+        );
+
+    const toolCall = requestEvent("request:tool-call", "dynamic_tool_call");
+    const approval = requestEvent("request:approval", "command");
+    yield* eventSink.write({ events: [toolCall, approval] });
+    yield* reactor.handle(toolCall);
+    assert.lengthOf(yield* notices(), 0);
+
+    // Unlike a question, an approval does not end the blocking wait, so it queues a notice.
+    yield* reactor.handle(approval);
+    yield* reactor.handle(approval);
+    const [notice] = yield* notices();
+    assert.lengthOf(yield* notices(), 1);
+    assert.include(notice?.text, "needs approval to run a command");
+    assert.include(notice?.text, "You cannot approve it.");
+    assert.include(notice?.text, `threadId ${task.childThreadId}`);
+    assert.deepEqual(notice?.notification, {
+      source: { kind: "delegated_task", taskIds: [task.id], childThreadId: task.childThreadId! },
+      outcome: "updated",
+      summary: 'Delegated task "Fix the build" needs approval',
+    });
+
+    // The user approves before the parent reads the notice, so it is withdrawn.
+    const approved = {
+      ...approval,
+      id: EventId.make("event:approval-resolved"),
+      payload: { ...approval.payload, status: "resolved" as const, resolvedAt: now },
+    };
+    yield* eventSink.write({ events: [approved] });
+    yield* reactor.handle(approved);
+    const noticeRun = (yield* projections.getThreadRecords(parentThreadId, ["runs"])).runs.find(
+      (run) => run.userMessageId === notice!.id,
+    );
+    assert.equal(noticeRun?.status, "cancelled");
   }).pipe(Effect.provide(DelegatedTaskQuestionReactor.layer.pipe(Layer.provideMerge(layerTest)))),
 );

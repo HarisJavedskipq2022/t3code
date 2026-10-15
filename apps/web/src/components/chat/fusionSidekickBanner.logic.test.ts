@@ -9,6 +9,7 @@ import { describe, expect, it } from "vite-plus/test";
 import * as DateTime from "effect/DateTime";
 
 import {
+  describeSidekickBlocker,
   resolveFusionSidekickActivity,
   runningSidekickCommandMinutes,
 } from "./fusionSidekickBanner.logic";
@@ -92,7 +93,15 @@ describe("resolveFusionSidekickActivity", () => {
     ).toBeNull();
   });
 
-  it("leaves input requests and missing threads to other surfaces", () => {
+  it("says what a blocked sidekick waits on, even while the lead is idle", () => {
+    expect(
+      resolveFusionSidekickActivity({
+        sidekick,
+        child: { ...child("running"), hasPendingApprovals: true },
+        leadWorking: false,
+        leadActivityStartedAt: null,
+      }),
+    ).toMatchObject({ kind: "approval", childThreadId: "thread-sidekick" });
     expect(
       resolveFusionSidekickActivity({
         sidekick,
@@ -100,7 +109,21 @@ describe("resolveFusionSidekickActivity", () => {
         leadWorking: true,
         leadActivityStartedAt,
       }),
+    ).toMatchObject({ kind: "question" });
+  });
+
+  it("ignores a request a finished sidekick run left behind", () => {
+    expect(
+      resolveFusionSidekickActivity({
+        sidekick,
+        child: { ...child("completed", "2026-10-13T09:00:00.000Z"), hasPendingUserInput: true },
+        leadWorking: true,
+        leadActivityStartedAt,
+      }),
     ).toBeNull();
+  });
+
+  it("leaves missing threads to other surfaces", () => {
     expect(
       resolveFusionSidekickActivity({
         sidekick: null,
@@ -153,6 +176,55 @@ describe("runningSidekickCommandMinutes", () => {
         [row({ type: "command_execution", status: "running", startedAt }, "inherited")],
         now,
       ),
+    ).toBeNull();
+  });
+});
+
+describe("describeSidekickBlocker", () => {
+  it("names the approval the sidekick needs and what it wants to run", () => {
+    expect(
+      describeSidekickBlocker(
+        [
+          row({ type: "approval_request", requestKind: "file-change", prompt: "Edit a.ts" }),
+          row({ type: "command_execution", status: "running", input: "ls" }),
+          row({
+            type: "approval_request",
+            requestKind: "command",
+            prompt: "git push origin main\n--force",
+          }),
+        ],
+        "approval",
+      ),
+    ).toBe("Needs approval to run a command: git push origin main");
+    expect(
+      describeSidekickBlocker(
+        [row({ type: "approval_request", requestKind: "mcp-elicitation", appName: "Figma" })],
+        "approval",
+      ),
+    ).toBe("Needs approval for a tool: Figma");
+    expect(
+      describeSidekickBlocker(
+        [row({ type: "approval_request", requestKind: "permission" })],
+        "approval",
+      ),
+    ).toBe("Needs a permission");
+  });
+
+  it("quotes the sidekick's unanswered question", () => {
+    const question = (text: string, questionAnswer?: unknown) =>
+      row({
+        type: "user_input_request",
+        questions: [{ id: "q", header: "Choice", question: text, options: [] }],
+        ...(questionAnswer === undefined ? {} : { questionAnswer }),
+      });
+    expect(
+      describeSidekickBlocker(
+        [question("Which database?"), question("Keep the old API?", { answers: {} })],
+        "question",
+      ),
+    ).toBe("Which database?");
+    expect(
+      describeSidekickBlocker([question("Which database?", { answers: {} })], "question"),
     ).toBeNull();
   });
 });
