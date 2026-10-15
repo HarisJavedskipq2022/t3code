@@ -93,6 +93,46 @@
     --fork-art-b: #fede5d;
     --fork-art-c: #36f9f6;
   }
+  html[data-theme-id="fork-neon-rain"] {
+    --fork-art-a: #5b3df5;
+    --fork-art-b: #00e5ff;
+    --fork-art-c: #ff2e97;
+  }
+  html[data-theme-id="fork-meadow-wind"] {
+    --fork-art-a: #5ec4e6;
+    --fork-art-b: #f3e1a7;
+    --fork-art-c: #7cb36b;
+  }
+  html[data-theme-id="fork-mecha-violet"] {
+    --fork-art-a: #8e44ad;
+    --fork-art-b: #9be33f;
+    --fork-art-c: #ff8a1f;
+  }
+  html[data-theme-id="fork-sakura-drift"] {
+    --fork-art-a: #e87fa3;
+    --fork-art-b: #ffd6e0;
+    --fork-art-c: #8fbf6a;
+  }
+  html[data-theme-id="fork-sunset-rush"] {
+    --fork-art-a: #ff9f1c;
+    --fork-art-b: #e63946;
+    --fork-art-c: #3a86ff;
+  }
+  html[data-theme-id="fork-matcha"] {
+    --fork-art-a: #5f9e6e;
+    --fork-art-b: #e8dcb5;
+    --fork-art-c: #a0704b;
+  }
+  html[data-theme-id="fork-citrus-pop"] {
+    --fork-art-a: #f5d90a;
+    --fork-art-b: #ff8a3d;
+    --fork-art-c: #1aa39a;
+  }
+  html[data-theme-id="fork-espresso"] {
+    --fork-art-a: #9c6644;
+    --fork-art-b: #e6c79c;
+    --fork-art-c: #7fbfa9;
+  }
 
   html[data-theme-id^="fork-"] {
     --stage-art-top: oklch(from var(--fork-art-a) 0.76 min(c, 0.15) h);

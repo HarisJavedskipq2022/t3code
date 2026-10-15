@@ -44,5 +44,21 @@
   "fork-horizon-light",
   "fork-horizon-dark",
   "fork-synthwave-light",
-  "fork-synthwave-dark"
+  "fork-synthwave-dark",
+  "fork-neon-rain-light",
+  "fork-neon-rain-dark",
+  "fork-meadow-wind-light",
+  "fork-meadow-wind-dark",
+  "fork-mecha-violet-light",
+  "fork-mecha-violet-dark",
+  "fork-sakura-drift-light",
+  "fork-sakura-drift-dark",
+  "fork-sunset-rush-light",
+  "fork-sunset-rush-dark",
+  "fork-matcha-light",
+  "fork-matcha-dark",
+  "fork-citrus-pop-light",
+  "fork-citrus-pop-dark",
+  "fork-espresso-light",
+  "fork-espresso-dark"
 ]
