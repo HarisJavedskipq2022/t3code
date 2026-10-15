@@ -87,6 +87,8 @@ export function useFusionSidekickBanner(input: {
       icon: <CombineIcon />,
       title: TITLES[stalled ? "stalled" : kind],
       description: reason ?? (step ? `${step}${elapsed}` : title),
+      // The sidekick thread, one click away, has the full story.
+      descriptionDetails: false,
       actions: (
         <>
           {stalled ? (

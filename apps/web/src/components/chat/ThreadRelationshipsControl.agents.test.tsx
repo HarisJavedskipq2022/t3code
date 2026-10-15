@@ -20,6 +20,8 @@ const state = vi.hoisted(() => ({
   command: vi.fn().mockResolvedValue({ _tag: "Success" }),
   workflowCommand: vi.fn().mockResolvedValue({ _tag: "Success" }),
   toast: vi.fn(),
+  confirmAndDeleteThread: vi.fn().mockResolvedValue({ _tag: "Success" }),
+  canOperate: true,
 }));
 
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => state.navigate }));
@@ -28,6 +30,12 @@ vi.mock("../../state/entities", () => ({
   useThreadShells: () => state.shells,
   useProjects: () => state.projects,
   useServerConfigs: () => state.configs,
+}));
+vi.mock("../../hooks/useThreadActions", () => ({
+  useThreadActions: () => ({ confirmAndDeleteThread: state.confirmAndDeleteThread }),
+}));
+vi.mock("../../state/session", () => ({
+  useEnvironmentScope: () => state.canOperate,
 }));
 vi.mock("../../lib/archivedThreadsState", () => ({
   useArchivedThreadSnapshots: () => ({ snapshots: [] }),
@@ -73,6 +81,8 @@ afterEach(async () => {
   state.command.mockClear();
   state.workflowCommand.mockReset().mockResolvedValue({ _tag: "Success" });
   state.toast.mockClear();
+  state.confirmAndDeleteThread.mockClear();
+  state.canOperate = true;
   state.projection = null;
 });
 
@@ -1272,3 +1282,130 @@ it.each(["source", "target"])(
     }
   },
 );
+
+it.each([
+  ["failed", true],
+  ["cancelled", true],
+  ["interrupted", true],
+  ["completed", false],
+  ["running", false],
+])("offers to delete a %s delegated child thread: %s", async (status, offered) => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  state.projection = {
+    thread: { id: "lead", lineage: { relationshipToParent: null } },
+    runs: [],
+    providerThreads: [],
+    providerSessions: [],
+    contextTransfers: [],
+    subagents: [
+      {
+        id: "sidekick",
+        driver: "opencode",
+        origin: "app_owned",
+        status,
+        providerInstanceId: "opencode",
+        childThreadId: "sidekick-chat",
+        title: "Fusion sidekick: tickets",
+        startedAt: DateTime.makeUnsafe("2026-10-15T19:43:00Z"),
+        completedAt: null,
+        updatedAt: DateTime.makeUnsafe("2026-10-15T19:43:00Z"),
+      },
+    ],
+  };
+  state.shells = [
+    {
+      environmentId: "remote",
+      source: {
+        id: "sidekick-chat",
+        title: "Fusion sidekick: tickets",
+        lineage: { parentThreadId: "lead", relationshipToParent: "subagent" },
+        status,
+      },
+    },
+  ];
+  await act(async () => {
+    renderer = create(
+      <ThreadRelationshipsPanel
+        environmentId={EnvironmentId.make("remote")}
+        threadId={ThreadId.make("lead")}
+      />,
+    );
+  });
+  const previousAgents = renderer.root.findAll(
+    (node) =>
+      node.type === "button" && node.props["aria-expanded"] === false && !node.props["aria-label"],
+  );
+  if (previousAgents.length > 0) await act(async () => previousAgents[0]!.props.onClick());
+  const deleteButtons = () =>
+    renderer.root.findAll(
+      (node) =>
+        node.type === "button" &&
+        node.props["aria-label"] === "Delete thread Fusion sidekick: tickets",
+    );
+  expect(deleteButtons()).toHaveLength(offered ? 1 : 0);
+  if (!offered) return;
+
+  await act(async () => deleteButtons()[0]!.props.onClick());
+  expect(state.confirmAndDeleteThread).toHaveBeenCalledExactlyOnceWith({
+    environmentId: "remote",
+    threadId: "sidekick-chat",
+  });
+  expect(state.navigate).not.toHaveBeenCalled();
+});
+
+it("does not offer to delete a stopped child thread without thread permission", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  state.canOperate = false;
+  state.projection = {
+    thread: { id: "lead", lineage: { relationshipToParent: null } },
+    runs: [],
+    providerThreads: [],
+    providerSessions: [],
+    contextTransfers: [],
+    subagents: [
+      {
+        id: "sidekick",
+        driver: "opencode",
+        origin: "app_owned",
+        status: "failed",
+        providerInstanceId: "opencode",
+        childThreadId: "sidekick-chat",
+        title: "Fusion sidekick: tickets",
+        startedAt: DateTime.makeUnsafe("2026-10-15T19:43:00Z"),
+        completedAt: null,
+        updatedAt: DateTime.makeUnsafe("2026-10-15T19:43:00Z"),
+      },
+    ],
+  };
+  state.shells = [
+    {
+      environmentId: "remote",
+      source: {
+        id: "sidekick-chat",
+        title: "Fusion sidekick: tickets",
+        lineage: { parentThreadId: "lead", relationshipToParent: "subagent" },
+        status: "failed",
+      },
+    },
+  ];
+  await act(async () => {
+    renderer = create(
+      <ThreadRelationshipsPanel
+        environmentId={EnvironmentId.make("remote")}
+        threadId={ThreadId.make("lead")}
+      />,
+    );
+  });
+  const previousAgents = renderer.root.findAll(
+    (node) =>
+      node.type === "button" && node.props["aria-expanded"] === false && !node.props["aria-label"],
+  );
+  if (previousAgents.length > 0) await act(async () => previousAgents[0]!.props.onClick());
+  expect(
+    renderer.root.findAll(
+      (node) =>
+        node.type === "button" &&
+        node.props["aria-label"] === "Delete thread Fusion sidekick: tickets",
+    ),
+  ).toHaveLength(0);
+});

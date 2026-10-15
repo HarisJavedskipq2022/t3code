@@ -101,3 +101,48 @@ it("only offers notice details when the description cannot fit", async () => {
   await act(() => resize());
   expect(details()).toHaveLength(0);
 });
+
+it("never offers details for a clipped description that opts out of them", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.stubGlobal(
+    "MutationObserver",
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
+  vi.stubGlobal("getComputedStyle", () => ({ position: "static" }));
+  const clipped = { querySelectorAll: () => [], clientWidth: 40, scrollWidth: 400 };
+  const render = (descriptionDetails: boolean) =>
+    create(
+      <ComposerBannerStack
+        items={[
+          {
+            id: "sidekick",
+            variant: "warning",
+            icon: null,
+            title: "Sidekick stopped",
+            description: "POST /alpha/generate → 403 error: the free tier has been retired.",
+            descriptionDetails,
+          },
+        ]}
+      />,
+      { createNodeMock: (element) => (element.type === "span" ? clipped : null) },
+    );
+  await act(() => {
+    renderer = render(true);
+  });
+  expect(renderer.root.findAllByProps({ "aria-label": "Show notice details" })).not.toHaveLength(0);
+  await act(() => renderer.unmount());
+  await act(() => {
+    renderer = render(false);
+  });
+  expect(renderer.root.findAllByProps({ "aria-label": "Show notice details" })).toHaveLength(0);
+});

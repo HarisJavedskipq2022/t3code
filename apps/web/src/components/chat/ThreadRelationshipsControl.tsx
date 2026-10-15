@@ -27,6 +27,11 @@ import {
   resolveLatestMergeBackRun,
 } from "@t3tools/client-runtime/state/thread-workflows";
 import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
+import {
+  AuthOrchestrationOperateScope,
   NodeId,
   type EnvironmentId,
   type OrchestrationV2Subagent,
@@ -46,18 +51,22 @@ import {
   MoreHorizontalIcon,
   PlusIcon,
   SquareIcon,
+  Trash2Icon,
   UnplugIcon,
 } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 
+import { useThreadActions } from "../../hooks/useThreadActions";
 import { useArchivedThreadSnapshots } from "../../lib/archivedThreadsState";
 import { buildThreadRouteParams } from "../../threadRoutes";
 import {
+  readThreadShell,
   useProjects,
   useServerConfigs,
   useThreadProjection,
   useThreadShells,
 } from "../../state/entities";
+import { useEnvironmentScope } from "../../state/session";
 import { threadEnvironment } from "../../state/threads";
 import { orchestrationEnvironment } from "../../state/orchestration";
 import { useAtomCommand } from "../../state/use-atom-command";
@@ -284,7 +293,10 @@ export function ThreadRelationshipsPanel(props: {
     orchestrationEnvironment.stopWorkflow.permissionAtom(props.environmentId),
   );
   const [busyAction, setBusyAction] = useState<"merge" | "detach" | null>(null);
+  // The row whose stop or delete is in flight.
   const [stoppingId, setStoppingId] = useState<string | null>(null);
+  const { confirmAndDeleteThread } = useThreadActions();
+  const canOperateThreads = useEnvironmentScope(props.environmentId, AuthOrchestrationOperateScope);
   const latestMergeBackRun = projection === null ? null : resolveLatestMergeBackRun(projection);
   const mergeTargetThreadId = resolveMergeBackTargetThreadId(projection);
   const relationshipRows = useMemo(
@@ -388,6 +400,28 @@ export function ThreadRelationshipsPanel(props: {
     }
   };
 
+  // Subagent threads have no sidebar row, so a stopped one is deleted from its parent's panel.
+  const deleteSubagentThread = async (childThreadId: ThreadId) => {
+    if (stoppingId !== null) return;
+    setStoppingId(childThreadId);
+    const childRef = scopeThreadRef(props.environmentId, childThreadId);
+    const result = await confirmAndDeleteThread(childRef);
+    setStoppingId(null);
+    // With the thread already gone, the failure was worktree cleanup, which deleteThread reports.
+    if (
+      result._tag === "Failure" &&
+      !isAtomCommandInterrupted(result) &&
+      readThreadShell(childRef) !== null
+    ) {
+      const error = squashAtomCommandFailure(result);
+      toastManager.add({
+        type: "error",
+        title: "Failed to delete thread",
+        description: error instanceof Error ? error.message : "An error occurred.",
+      });
+    }
+  };
+
   const stopWorkflow = async (subagentId: string) => {
     if (stoppingId !== null) return;
     setStoppingId(subagentId);
@@ -473,6 +507,12 @@ export function ThreadRelationshipsPanel(props: {
                     ["pending", "running", "waiting"].includes(agent.nativeStatus))) &&
                 agent.startedAt &&
                 ["pending", "running", "waiting"].includes(agent.status);
+              // Fusion replaces a stopped sidekick instead of reusing it, so deleting one is safe.
+              const canDelete =
+                canOperateThreads &&
+                agent?.origin === "app_owned" &&
+                node?.thread != null &&
+                ["failed", "cancelled", "interrupted"].includes(agent.status);
               const threadTitle = relationshipThreadTitle({
                 // A workflow's name is shorter than its child thread's title.
                 title:
@@ -493,7 +533,9 @@ export function ThreadRelationshipsPanel(props: {
                 workflowGroup?.workflow.status === "running" &&
                 agent?.origin === "provider_native" &&
                 providerDriver === "claudeAgent";
-              const trailingVisibilityClass = (workflowGroup ? canStopWorkflow : canStop)
+              const trailingVisibilityClass = (
+                workflowGroup ? canStopWorkflow : canStop || canDelete
+              )
                 ? "group-hover:opacity-0 group-focus-within:opacity-0 pointer-coarse:opacity-0 [@media(hover:none)]:opacity-0"
                 : "";
               const project = projects.find((project) => project.id === node?.thread?.projectId);
@@ -665,7 +707,7 @@ export function ThreadRelationshipsPanel(props: {
                   ) : (
                     relationshipLink
                   )}
-                  {canStop && agent ? (
+                  {(canStop || canDelete) && agent ? (
                     <div className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100">
                       <Tooltip>
                         <TooltipTrigger
@@ -675,19 +717,31 @@ export function ThreadRelationshipsPanel(props: {
                               variant="ghost"
                               part="icon"
                               tone="destructive"
-                              aria-label={`Stop subagent ${threadTitle}`}
+                              aria-label={
+                                canStop
+                                  ? `Stop subagent ${threadTitle}`
+                                  : `Delete thread ${threadTitle}`
+                              }
                               disabled={stoppingId !== null}
-                              onClick={() => void stopSubagent(threadId, agent)}
+                              onClick={() =>
+                                void (canStop
+                                  ? stopSubagent(threadId, agent)
+                                  : deleteSubagentThread(threadId))
+                              }
                             />
                           }
                         >
                           {stoppingId === threadId ? (
                             <LoaderCircleIcon aria-hidden className="size-3 animate-spin" />
-                          ) : (
+                          ) : canStop ? (
                             <SquareIcon aria-hidden className="size-3 fill-current" />
+                          ) : (
+                            <Trash2Icon aria-hidden className="size-3" />
                           )}
                         </TooltipTrigger>
-                        <TooltipPopup side="left">Stop subagent</TooltipPopup>
+                        <TooltipPopup side="left">
+                          {canStop ? "Stop subagent" : "Delete thread"}
+                        </TooltipPopup>
                       </Tooltip>
                     </div>
                   ) : null}

@@ -17,6 +17,8 @@ export interface ComposerBannerStackItem {
   readonly icon: ReactNode;
   readonly title: ReactNode;
   readonly description?: ReactNode;
+  /** False keeps a clipped description to one line, with no popover for the rest. */
+  readonly descriptionDetails?: boolean;
   readonly children?: ReactNode;
   readonly actions?: ReactNode;
   readonly dismissLabel?: string;
@@ -250,14 +252,14 @@ export function ComposerBannerStack({ className, items, attachedAbove }: Compose
 }
 
 /** Keep full descriptions reachable only when their inline copy is clipped. */
-function NoticeDescription({ children }: { children: ReactNode }) {
+function NoticeDescription({ children, details }: { children: ReactNode; details: boolean }) {
   const descriptionRef = useRef<HTMLSpanElement>(null);
   const detailsRef = useRef<HTMLButtonElement>(null);
   const [showDetails, setShowDetails] = useState(false);
 
   useLayoutEffect(() => {
     const description = descriptionRef.current;
-    if (!description) return;
+    if (!description || !details) return;
     const measure = () => {
       // Ignore the space taken by the details button itself so it cannot
       // sustain its own overflow after the description would otherwise fit.
@@ -279,7 +281,7 @@ function NoticeDescription({ children }: { children: ReactNode }) {
       stopObserving();
       mutations.disconnect();
     };
-  }, []);
+  }, [details]);
 
   return (
     <span className="contents">
@@ -289,7 +291,7 @@ function NoticeDescription({ children }: { children: ReactNode }) {
       >
         {children}
       </span>
-      {showDetails ? (
+      {details && showDetails ? (
         <Popover>
           <PopoverTrigger
             openOnHover
@@ -356,7 +358,11 @@ function ComposerBannerStackAlert({
         </ComposerBanner.Icon>
         <ComposerBanner.Content className="whitespace-nowrap">
           <span className="min-w-0 truncate font-medium leading-7 sm:leading-6">{item.title}</span>
-          {item.description ? <NoticeDescription>{item.description}</NoticeDescription> : null}
+          {item.description ? (
+            <NoticeDescription details={item.descriptionDetails !== false}>
+              {item.description}
+            </NoticeDescription>
+          ) : null}
         </ComposerBanner.Content>
         {item.actions || item.onDismiss ? (
           <ComposerBanner.Actions>
