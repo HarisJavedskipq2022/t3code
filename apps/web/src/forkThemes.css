@@ -58,6 +58,41 @@
     --fork-art-b: #ff79c6;
     --fork-art-c: #8be9fd;
   }
+  html[data-theme-id="fork-ayu"] {
+    --fork-art-a: #e6b450;
+    --fork-art-b: #ff8f40;
+    --fork-art-c: #39bae6;
+  }
+  html[data-theme-id="fork-monokai-pro"] {
+    --fork-art-a: #ff6188;
+    --fork-art-b: #ffd866;
+    --fork-art-c: #78dce8;
+  }
+  html[data-theme-id="fork-night-owl"] {
+    --fork-art-a: #7fdbca;
+    --fork-art-b: #c792ea;
+    --fork-art-c: #82aaff;
+  }
+  html[data-theme-id="fork-vitesse"] {
+    --fork-art-a: #80a665;
+    --fork-art-b: #c98a7d;
+    --fork-art-c: #5eaab5;
+  }
+  html[data-theme-id="fork-flexoki"] {
+    --fork-art-a: #d14d41;
+    --fork-art-b: #d0a215;
+    --fork-art-c: #3aa99f;
+  }
+  html[data-theme-id="fork-horizon"] {
+    --fork-art-a: #25b0bc;
+    --fork-art-b: #e95678;
+    --fork-art-c: #fab795;
+  }
+  html[data-theme-id="fork-synthwave"] {
+    --fork-art-a: #ff7edb;
+    --fork-art-b: #fede5d;
+    --fork-art-c: #36f9f6;
+  }
 
   html[data-theme-id^="fork-"] {
     --stage-art-top: oklch(from var(--fork-art-a) 0.76 min(c, 0.15) h);
