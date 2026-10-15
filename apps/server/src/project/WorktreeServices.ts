@@ -228,7 +228,7 @@ const make = Effect.gen(function* () {
     }
     const target = {
       threadId,
-      terminalId: `service-${yield* crypto.randomUUIDv4.pipe(Effect.mapError((cause) => new WorktreeServicesError({ operation: "read", cause })))}`,
+      terminalId: `service-${yield* crypto.randomUUIDv4().pipe(Effect.mapError((cause) => new WorktreeServicesError({ operation: "read", cause })))}`,
     };
     record.row.terminal = target;
     record.row.status = "starting";
