@@ -273,6 +273,9 @@ export function ThreadRelationshipsPanel(props: {
   const archivedShells = archived.snapshots.find(
     (entry) => entry.environmentId === props.environmentId,
   )?.snapshot.threads;
+  // A thread with neither a live nor an archived shell was deleted, but only once the
+  // archive has loaded. A refresh keeps the previous snapshot, so it does not reopen this.
+  const absentThreadsAreDeleted = archivedShells !== undefined && archived.error === null;
   const graph = useMemo(() => {
     const shells: ReadonlyArray<OrchestrationV2ThreadShell> = [
       ...threadShells
@@ -306,17 +309,27 @@ export function ThreadRelationshipsPanel(props: {
         rows: immediateThreadRelationships(graph, props.threadId),
         currentThreadId: props.threadId,
         mergeTargetThreadId,
-      }).map((row) => {
-        const agent =
-          row.edge.kind === "subagent" && !isParentThreadRelationship(row.edge, props.threadId)
-            ? subagentsByThreadId.get(row.threadId)
-            : undefined;
+      }).flatMap((row) => {
+        const isChildAgent =
+          row.edge.kind === "subagent" && !isParentThreadRelationship(row.edge, props.threadId);
+        // The parent's task record outlives a deleted child thread; the row should not.
+        if (isChildAgent && absentThreadsAreDeleted && graph.nodes.get(row.threadId)?.missing) {
+          return [];
+        }
+        const agent = isChildAgent ? subagentsByThreadId.get(row.threadId) : undefined;
         const workflowGroup = agent === undefined ? undefined : workflowGroupsById.get(agent.id);
         return workflowGroup === undefined
-          ? row
-          : { ...row, edge: { ...row.edge, status: workflowGroup.workflow.status } };
+          ? [row]
+          : [{ ...row, edge: { ...row.edge, status: workflowGroup.workflow.status } }];
       }),
-    [graph, mergeTargetThreadId, props.threadId, subagentsByThreadId, workflowGroupsById],
+    [
+      absentThreadsAreDeleted,
+      graph,
+      mergeTargetThreadId,
+      props.threadId,
+      subagentsByThreadId,
+      workflowGroupsById,
+    ],
   );
   const canMerge = mergeTargetThreadId !== null && latestMergeBackRun !== null;
   const canDetach = projection ? canDetachThreadProviderSession(projection) : false;

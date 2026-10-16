@@ -22,6 +22,7 @@ const state = vi.hoisted(() => ({
   toast: vi.fn(),
   confirmAndDeleteThread: vi.fn().mockResolvedValue({ _tag: "Success" }),
   canOperate: true,
+  archived: { snapshots: [] as unknown[], error: null as string | null, isLoading: false },
 }));
 
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => state.navigate }));
@@ -38,7 +39,7 @@ vi.mock("../../state/session", () => ({
   useEnvironmentScope: () => state.canOperate,
 }));
 vi.mock("../../lib/archivedThreadsState", () => ({
-  useArchivedThreadSnapshots: () => ({ snapshots: [] }),
+  useArchivedThreadSnapshots: () => state.archived,
 }));
 vi.mock("../../state/use-atom-command", () => ({
   useAtomCommand: (command: { label: string }) =>
@@ -83,6 +84,7 @@ afterEach(async () => {
   state.toast.mockClear();
   state.confirmAndDeleteThread.mockClear();
   state.canOperate = true;
+  state.archived = { snapshots: [], error: null, isLoading: false };
   state.projection = null;
 });
 
@@ -1408,4 +1410,111 @@ it("does not offer to delete a stopped child thread without thread permission", 
         node.props["aria-label"] === "Delete thread Fusion sidekick: tickets",
     ),
   ).toHaveLength(0);
+});
+
+it("drops a deleted child agent's row only once the archive shows its thread is gone", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const agent = {
+    driver: "opencode",
+    origin: "app_owned",
+    providerInstanceId: "opencode",
+    startedAt: DateTime.makeUnsafe("2026-10-15T19:43:00Z"),
+    completedAt: null,
+    updatedAt: DateTime.makeUnsafe("2026-10-15T19:43:00Z"),
+  };
+  state.projection = {
+    thread: { id: "lead", lineage: { relationshipToParent: null } },
+    runs: [],
+    providerThreads: [],
+    providerSessions: [],
+    contextTransfers: [],
+    subagents: [
+      {
+        ...agent,
+        id: "sidekick",
+        status: "failed",
+        childThreadId: "sidekick-chat",
+        title: "Fusion sidekick: tickets",
+      },
+      {
+        ...agent,
+        id: "reviewer",
+        status: "completed",
+        childThreadId: "reviewer-chat",
+        title: "Reviewer",
+      },
+    ],
+  };
+  const childShell = (id: string, title: string, status: string) => ({
+    environmentId: "remote",
+    source: {
+      id,
+      title,
+      lineage: { parentThreadId: "lead", relationshipToParent: "subagent" },
+      status,
+    },
+  });
+  const reviewerShell = childShell("reviewer-chat", "Reviewer", "completed");
+  state.shells = [childShell("sidekick-chat", "Fusion sidekick: tickets", "failed"), reviewerShell];
+  // The archive has not loaded yet.
+  state.archived = { snapshots: [], error: null, isLoading: true };
+  const panel = () => (
+    <ThreadRelationshipsPanel
+      environmentId={EnvironmentId.make("remote")}
+      threadId={ThreadId.make("lead")}
+    />
+  );
+  await act(async () => {
+    renderer = create(panel());
+  });
+  await act(async () =>
+    renderer.root
+      .find(
+        (node) =>
+          node.type === "button" &&
+          node.props["aria-expanded"] === false &&
+          !node.props["aria-label"],
+      )
+      .props.onClick(),
+  );
+  const rowText = () =>
+    renderer.root.findAllByType("li").map((row) =>
+      row
+        .findAll((node) => typeof node.type === "string")
+        .flatMap((node) => node.children.filter((child) => typeof child === "string"))
+        .join(""),
+    );
+  expect(rowText()).toHaveLength(2);
+
+  state.confirmAndDeleteThread.mockImplementationOnce(async () => {
+    state.shells = [reviewerShell];
+    return { _tag: "Success" };
+  });
+  await act(async () =>
+    renderer.root
+      .findByProps({ "aria-label": "Delete thread Fusion sidekick: tickets" })
+      .props.onClick(),
+  );
+  await act(async () => renderer.update(panel()));
+  // Without the archive, a thread with no shell may be archived rather than deleted.
+  expect(rowText()).toHaveLength(2);
+  expect(rowText().some((text) => text.includes("tickets"))).toBe(true);
+
+  state.archived = { snapshots: [], error: "Failed to load archived threads.", isLoading: false };
+  await act(async () => renderer.update(panel()));
+  expect(rowText()).toHaveLength(2);
+
+  state.archived = {
+    snapshots: [{ environmentId: "remote", snapshot: { threads: [] } }],
+    error: null,
+    isLoading: false,
+  };
+  await act(async () => renderer.update(panel()));
+  expect(rowText()).toHaveLength(1);
+  expect(rowText()[0]).toContain("Reviewer");
+
+  // Refreshing the archive keeps its snapshot, so the deleted row stays gone.
+  state.archived = { ...state.archived, isLoading: true };
+  await act(async () => renderer.update(panel()));
+  expect(rowText()).toHaveLength(1);
 });
