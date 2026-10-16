@@ -16,9 +16,9 @@ import { terminalOutputText } from "@t3tools/client-runtime/state/terminal";
 import { serviceLogText } from "@t3tools/client-runtime/state/worktreeServices";
 import { useEffect, useRef, useState } from "react";
 import { ScrollView, View } from "react-native";
-import { AppSheet } from "../../components/AppSheet";
-import { AppText as Text } from "../../components/AppText";
-import { ControlPill } from "../../components/ControlPill";
+import { Sheet } from "../../components/ui/Sheet";
+import { AppText as Text } from "../../components/ui/AppText";
+import { ControlPill } from "../../components/ui/ControlPill";
 import { useEnvironmentQuery } from "../../state/query";
 import { useEnvironmentScope } from "../../state/session";
 import { useAtomCommand } from "../../state/use-atom-command";
@@ -129,7 +129,7 @@ function Services(props: Props) {
         onPress={() => setOpen(true)}
       />
       {open ? (
-        <AppSheet
+        <Sheet
           title="App services"
           onClose={() => {
             setOpen(false);
@@ -267,7 +267,7 @@ function Services(props: Props) {
               </View>
             ))}
           </ScrollView>
-        </AppSheet>
+        </Sheet>
       ) : null}
     </View>
   );

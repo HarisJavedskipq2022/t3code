@@ -45,8 +45,6 @@ function bannerPriority(item: ComposerBannerStackEntry) {
 interface ComposerBannerStackProps {
   readonly className?: string;
   readonly items: ReadonlyArray<ComposerBannerStackEntry>;
-  /** Attachments that sit between the stacked notices and the front item, such as the queue.
-      The stacked notices peek above the whole column, never from between two attachments. */
   readonly attachedAbove?: ReactNode;
 }
 
@@ -89,7 +87,6 @@ export function ComposerBannerStack({ className, items, attachedAbove }: Compose
     }
   }, [stackExpanded]);
 
-  // Activity stays attached. Urgency and severity only order the notices behind it.
   const orderedItems = items.toSorted((a, b) => bannerPriority(a) - bannerPriority(b));
   const frontItem = orderedItems[0];
   if (!frontItem) {
@@ -274,7 +271,6 @@ function NoticeDescription({ children, details }: { children: ReactNode; details
     };
     measure();
     const stopObserving = observeResize(description, measure);
-    // A child can reveal new text without resizing its clipped box.
     const mutations = new MutationObserver(measure);
     mutations.observe(description, { childList: true, subtree: true, characterData: true });
     return () => {
@@ -352,7 +348,7 @@ function ComposerBannerStackAlert({
       variant={item.variant}
       density="comfortable"
     >
-      <ComposerBanner.Row layout="wrap-actions">
+      <ComposerBanner.Row layout={item.priority === "activity" ? "inline" : "wrap-actions"}>
         <ComposerBanner.Icon className="h-(--composer-banner-icon-column) self-start">
           {item.icon}
         </ComposerBanner.Icon>

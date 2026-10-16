@@ -1,5 +1,5 @@
-// Packaged app entry. Enables the compile cache before the main bundle loads,
-// so the cache also covers main.cjs itself.
+// Enables the compile cache before the main bundle loads, so the cache also
+// covers main.cjs itself.
 require("./compileCache.cjs");
 
 // A fork build (scripts/build-desktop-artifact.ts, T3CODE_DESKTOP_FORK_*) bakes
