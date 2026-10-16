@@ -91,6 +91,7 @@ import { createGitDiffFileContentsLoader } from "../lib/diffFileContents";
 import { useReviewFilePatches } from "./diffs/useReviewFilePatches";
 import { DiffFileLoadingBoundary } from "./diffs/DiffFileLoadingBoundary";
 import { DiffFileStatus } from "./diffs/DiffFileStatus";
+import { useVetLineNotes } from "./vet/VetPanel";
 
 type DiffThemeType = "light" | "dark";
 const AUTOMATIC_BASE_REF = "__automatic_base_ref__";
@@ -288,9 +289,25 @@ export default function DiffPanel({
   const selectedRunId = diffSelection.kind === "turn" ? diffSelection.turnId : null;
   const selectedGitScope = diffSelection.kind === "unstaged" ? "unstaged" : "branch";
   const selectedBaseRef = diffSelection.kind === "branch" ? diffSelection.baseRef : null;
-  const selectedFilePath = diffSelection.kind === "turn" ? diffSelection.filePath : null;
+  const selectedFilePath =
+    diffSelection.kind === "turn"
+      ? diffSelection.filePath
+      : diffSelection.kind === "branch"
+        ? (diffSelection.reveal?.filePath ?? null)
+        : null;
   const selectedFileRevealRequestId =
-    diffSelection.kind === "turn" ? diffSelection.revealRequestId : 0;
+    diffSelection.kind === "turn"
+      ? diffSelection.revealRequestId
+      : diffSelection.kind === "branch"
+        ? (diffSelection.reveal?.requestId ?? 0)
+        : 0;
+  const selectedLine =
+    diffSelection.kind === "branch" ? (diffSelection.reveal?.line ?? null) : null;
+  // Findings cite lines of the current files, which a past turn's diff does not show.
+  const vetLineNotes = useVetLineNotes(
+    selectedRunId === null ? (routeThreadRef ?? null) : null,
+    composerDraftTarget,
+  );
   const selectedTurn =
     selectedRunId === null
       ? undefined
@@ -575,7 +592,16 @@ export default function DiffPanel({
   useEffect(() => {
     if (!selectedDiffFileKey || !codeView?.getInstance()) return;
     codeView.scrollTo({ type: "item", id: selectedDiffFileKey, align: "start" });
-  }, [codeView, codeViewMountKey, selectedDiffFileKey, selectedFileRevealRequestId]);
+    // A line hidden in collapsed context cannot be resolved; the file stays in view instead.
+    if (selectedLine !== null)
+      codeView.scrollTo({
+        type: "line",
+        id: selectedDiffFileKey,
+        lineNumber: selectedLine,
+        side: "additions",
+        align: "center",
+      });
+  }, [codeView, codeViewMountKey, selectedDiffFileKey, selectedFileRevealRequestId, selectedLine]);
 
   const treeRevealScope = useMemo(
     () => ({ collapseScopeKey, diffSelection }),
@@ -587,7 +613,7 @@ export default function DiffPanel({
     codeViewFiles.map((file) => file.fileKey),
   );
   const revealDiffFile = useCallback(
-    (filePath: string) => {
+    (filePath: string, scroll = true) => {
       const index = renderableFileEntries.findIndex(
         (candidate) => resolveFileDiffPath(candidate.fileDiff) === filePath,
       );
@@ -603,7 +629,7 @@ export default function DiffPanel({
       if (lazySource && index >= settledFileCount) {
         requestFile(index);
       }
-      requestTreeReveal(file.fileKey);
+      if (scroll) requestTreeReveal(file.fileKey);
     },
     [
       renderableFileEntries,
@@ -618,7 +644,8 @@ export default function DiffPanel({
 
   const externalRevealRef = useRef<{ cache: string; key: string } | null>(null);
   useEffect(() => {
-    if (!lazySource || !selectedFilePath) return;
+    // A line reveal must also unfold its file when the whole diff is already loaded.
+    if (!selectedFilePath || (!lazySource && selectedLine === null)) return;
     const key = `${selectedFilePath}:${selectedFileRevealRequestId}`;
     if (
       externalRevealRef.current?.cache === filePatchScope &&
@@ -626,8 +653,16 @@ export default function DiffPanel({
     )
       return;
     externalRevealRef.current = { cache: filePatchScope, key };
-    revealDiffFile(selectedFilePath);
-  }, [lazySource, selectedFilePath, selectedFileRevealRequestId, filePatchScope, revealDiffFile]);
+    // A line reveal scrolls itself once the file arrives; a file scroll here would win the race.
+    revealDiffFile(selectedFilePath, selectedLine === null);
+  }, [
+    lazySource,
+    selectedFilePath,
+    selectedFileRevealRequestId,
+    selectedLine,
+    filePatchScope,
+    revealDiffFile,
+  ]);
 
   const openDiffFile = useCallback(
     (filePath: string) => {
@@ -1161,6 +1196,7 @@ export default function DiffPanel({
                     sectionId={reviewSectionId}
                     sectionTitle={reviewSectionTitle}
                     composerDraftTarget={composerDraftTarget}
+                    lineNotes={vetLineNotes}
                     renderHeaderFilenameSuffix={(fileDiff) => {
                       const path = resolveFileDiffPath(fileDiff);
                       const state = fileStates.get(path);

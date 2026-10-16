@@ -39,6 +39,27 @@ describe("diffPanelStore", () => {
     ).toEqual({ kind: "branch", baseRef: "origin/release" });
   });
 
+  it("reveals a line in Changes against the chosen base, again on each request", () => {
+    const store = useDiffPanelStore.getState();
+    store.selectBranchBaseRef(THREAD_REF, "origin/release");
+    store.selectTurn(THREAD_REF, RunId.make("turn-1"));
+    store.revealBranchLine(THREAD_REF, "src/app.ts", 12);
+    store.revealBranchLine(THREAD_REF, "src/app.ts", 12);
+
+    expect(
+      selectThreadDiffPanelSelection(useDiffPanelStore.getState().byThreadKey, THREAD_REF),
+    ).toEqual({
+      kind: "branch",
+      baseRef: "origin/release",
+      reveal: { filePath: "src/app.ts", line: 12, requestId: 2 },
+    });
+
+    store.selectGitScope(THREAD_REF, "branch");
+    expect(
+      selectThreadDiffPanelSelection(useDiffPanelStore.getState().byThreadKey, THREAD_REF),
+    ).toEqual({ kind: "branch", baseRef: "origin/release" });
+  });
+
   it("preserves an explicit branch selection", () => {
     useDiffPanelStore.getState().selectGitScope(THREAD_REF, "branch");
 

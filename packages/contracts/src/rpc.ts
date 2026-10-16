@@ -5,6 +5,13 @@ import {
   WorktreeServicesError,
 } from "./worktreeServices.ts";
 import {
+  VetError,
+  VetRunInput,
+  VetSnapshot,
+  VetThreadInput,
+  VetUpdateFindingInput,
+} from "./vet.ts";
+import {
   OrchestrationV2SearchThreadError,
   OrchestrationV2SearchThreadInput,
   OrchestrationV2SearchThreadResult,
@@ -444,6 +451,12 @@ export const WS_METHODS = {
   // Review methods
   reviewGetDiffPreview: "review.getDiffPreview",
   reviewGetDiffFileContents: "review.getDiffFileContents",
+
+  // Vet methods
+  vetWatch: "vet.watch",
+  vetRun: "vet.run",
+  vetCancel: "vet.cancel",
+  vetUpdateFinding: "vet.updateFinding",
 
   // Terminal methods
   worktreeServicesWatch: "worktreeServices.watch",
@@ -1455,6 +1468,28 @@ const WsReviewGetDiffFileContentsRpc = Rpc.make(WS_METHODS.reviewGetDiffFileCont
   error: Schema.Union([ReviewDiffPreviewError, EnvironmentAuthorizationError]),
 });
 
+const WsVetWatchRpc = Rpc.make(WS_METHODS.vetWatch, {
+  payload: VetThreadInput,
+  success: VetSnapshot,
+  error: Schema.Union([VetError, EnvironmentAuthorizationError]),
+  stream: true,
+});
+const WsVetRunRpc = Rpc.make(WS_METHODS.vetRun, {
+  payload: VetRunInput,
+  success: VetSnapshot,
+  error: Schema.Union([VetError, EnvironmentAuthorizationError]),
+});
+const WsVetCancelRpc = Rpc.make(WS_METHODS.vetCancel, {
+  payload: VetThreadInput,
+  success: VetSnapshot,
+  error: Schema.Union([VetError, EnvironmentAuthorizationError]),
+});
+const WsVetUpdateFindingRpc = Rpc.make(WS_METHODS.vetUpdateFinding, {
+  payload: VetUpdateFindingInput,
+  success: VetSnapshot,
+  error: Schema.Union([VetError, EnvironmentAuthorizationError]),
+});
+
 const WsWorktreeServicesWatchRpc = Rpc.make(WS_METHODS.worktreeServicesWatch, {
   payload: WorktreeServicesInput,
   success: WorktreeServicesSnapshot,
@@ -1896,6 +1931,10 @@ export class RpcScopeAuthorization extends RpcMiddleware.Service<RpcScopeAuthori
 ) {}
 
 export const WsRpcGroup = RpcGroup.make(
+  WsVetWatchRpc,
+  WsVetRunRpc,
+  WsVetCancelRpc,
+  WsVetUpdateFindingRpc,
   WsWorktreeServicesWatchRpc,
   WsWorktreeServicesControlRpc,
   WsServerProbeRpc,

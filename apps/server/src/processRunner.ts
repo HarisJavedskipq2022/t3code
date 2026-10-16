@@ -34,6 +34,8 @@ export interface ProcessRunInput {
    * Partial stdout/stderr are not preserved.
    */
   readonly timeoutBehavior?: "error" | "timedOutResult" | undefined;
+  /** Escalate to SIGKILL when the process group outlives SIGTERM by this long on interrupt. */
+  readonly forceKillAfter?: Duration.Input | undefined;
 }
 
 export interface ProcessRunOutput {
@@ -294,6 +296,7 @@ const runProcessCore = Effect.fn("processRunner.runProcessCore")(function* (
             }
           : {}),
         shell: spawnCommand.shell,
+        ...(input.forceKillAfter === undefined ? {} : { forceKillAfter: input.forceKillAfter }),
       }),
     )
     .pipe(

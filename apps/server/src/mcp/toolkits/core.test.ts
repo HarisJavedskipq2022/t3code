@@ -59,6 +59,7 @@ import { AttachmentToolkit } from "./attachment/tools.ts";
 import * as AttachmentHandlers from "./attachment/handlers.ts";
 import { ThreadToolkit } from "./thread/tools.ts";
 import { WorktreeToolkit } from "./worktree/tools.ts";
+import { VetToolkit } from "./vet/tools.ts";
 import { DeviceToolkit } from "./device/tools.ts";
 
 const layerOrchestratorToolkit = McpHttpServer.layerOrchestratorToolkit.pipe(
@@ -96,6 +97,7 @@ it("publishes unique tool names with reference-free object-root inputs", () => {
     OrchestratorToolkit,
     PreviewToolkit,
     WorktreeToolkit,
+    VetToolkit,
     ThreadToolkit,
     AttachmentToolkit,
     ProjectToolkit,

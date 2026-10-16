@@ -77,6 +77,7 @@ import {
   SquarePenIcon,
   SunIcon,
   TextSearchIcon,
+  Gavel,
 } from "lucide-react";
 import { requestThreadFindOpen } from "./chat/threadFindActionBus";
 import {
@@ -1962,6 +1963,21 @@ function OpenCommandPaletteDialog(props: {
         },
       });
     }
+  }
+
+  if (activeThread !== null) {
+    const threadRef = scopeThreadRef(activeThread.environmentId, activeThread.id);
+    actionItems.push({
+      kind: "action",
+      value: "action:open-vet",
+      searchTerms: ["vet", "review", "judge", "findings", "audit"],
+      title: "Vet this thread's change",
+      description: "Have a different model review the branch, then confirm or dismiss findings",
+      icon: <Gavel className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        useRightPanelStore.getState().open(threadRef, "vet");
+      },
+    });
   }
 
   if (activeThread !== null) {

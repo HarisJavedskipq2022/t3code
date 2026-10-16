@@ -5,8 +5,15 @@ import { createJSONStorage, persist } from "zustand/middleware";
 
 import { resolveStorage } from "./lib/storage";
 
+/** A file, and optionally a line on its new side, to bring into view once it renders. */
+interface DiffPanelReveal {
+  filePath: string;
+  line: number | null;
+  requestId: number;
+}
+
 export type DiffPanelSelection =
-  | { kind: "branch"; baseRef: string | null }
+  | { kind: "branch"; baseRef: string | null; reveal?: DiffPanelReveal }
   | { kind: "unstaged" }
   | { kind: "turn"; turnId: RunId; filePath: string | null; revealRequestId: number };
 
@@ -19,6 +26,8 @@ interface DiffPanelStoreState {
   selectGitScope: (ref: ScopedThreadRef, scope: "branch" | "unstaged") => void;
   selectBranchBaseRef: (ref: ScopedThreadRef, baseRef: string | null) => void;
   selectTurn: (ref: ScopedThreadRef, turnId: RunId, filePath?: string) => void;
+  /** Shows the branch's changes scrolled to a file and line, keeping the chosen base. */
+  revealBranchLine: (ref: ScopedThreadRef, filePath: string, line: number | null) => void;
   reconcileTurnSelection: (ref: ScopedThreadRef, availableTurnIds: ReadonlyArray<RunId>) => void;
   removeThread: (ref: ScopedThreadRef) => void;
 }
@@ -82,6 +91,30 @@ export const useDiffPanelStore = create<DiffPanelStoreState>()(
                 turnId,
                 filePath: filePath?.trim() || null,
                 revealRequestId: previous?.kind === "turn" ? previous.revealRequestId + 1 : 1,
+              },
+            },
+          };
+        }),
+      revealBranchLine: (ref, filePath, line) =>
+        set((state) => {
+          const threadKey = scopedThreadKey(ref);
+          const previous = state.byThreadKey[threadKey];
+          const baseRef =
+            previous?.kind === "branch"
+              ? previous.baseRef
+              : (state.branchBaseRefByThreadKey[threadKey] ?? null);
+          return {
+            byThreadKey: {
+              ...state.byThreadKey,
+              [threadKey]: {
+                kind: "branch",
+                baseRef,
+                reveal: {
+                  filePath,
+                  line,
+                  requestId:
+                    (previous?.kind === "branch" ? (previous.reveal?.requestId ?? 0) : 0) + 1,
+                },
               },
             },
           };

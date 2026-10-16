@@ -422,6 +422,10 @@
     "./state/worktreeServices": {
       "types": "./src/state/worktreeServices.ts",
       "default": "./src/state/worktreeServices.ts"
+    },
+    "./state/vet": {
+      "types": "./src/state/vet.ts",
+      "default": "./src/state/vet.ts"
     }
   },
   "scripts": {
