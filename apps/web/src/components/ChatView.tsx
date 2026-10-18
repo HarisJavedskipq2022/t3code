@@ -1,5 +1,5 @@
-import { worktreeServicesEnvironment } from "../state/worktreeServices";
 import { ThreadFind, ThreadFindCanvas, type ThreadFindControls } from "./chat/ThreadFindProvider";
+import { fusionTurnStartField, useForkChatViewExtras } from "./chat/forkChatViewExtras";
 import { THREAD_FIND_BAR_RESERVED_HEIGHT } from "./chat/ThreadFindBar";
 import { usageLimitRecoveryBannerItem } from "./chat/UsageLimitRecoveryBanner";
 import {
@@ -112,8 +112,6 @@ import {
   type CodexFeedbackSubmission,
 } from "@t3tools/client-runtime/state/threads";
 import { resolveThreadLastVisitedAt } from "./Sidebar.logic";
-import { useFusionSidekickBanner } from "./chat/fusionSidekickBanner";
-import { describeAgentStep } from "./chat/agentStep.logic";
 import {
   parseScopedThreadKey,
   scopedThreadKey,
@@ -324,10 +322,8 @@ import {
   type ComposerImageAttachment,
   type DraftThreadEnvMode,
   useComposerDraftStore,
-  composerTargetKey,
   DraftId,
 } from "../composerDraftStore";
-import { useFusionDraftStore } from "../fusionDraftStore";
 import {
   formatTerminalContextLabel,
   type TerminalContextDraft,
@@ -3407,8 +3403,20 @@ export default function ChatView(props: ChatViewProps) {
     storeCloseTerminal(activeThreadRef, terminalId);
     setTerminalFocusRequestId((value) => value + 1);
   };
-  const controlService = useAtomCommand(worktreeServicesEnvironment.control, {
-    reportFailure: false,
+  const forkExtras = useForkChatViewExtras({
+    environmentId,
+    activeThreadRef,
+    routeThreadDetailRef,
+    vetAvailable: isServerThread && isGitRepo,
+    isWorking,
+    isPreparingWorktree,
+    isCompacting,
+    paintOnlyDisplayedTimeline,
+    activeWorkStartedAt,
+    activeRunId: activeActivityRun?.runId ?? null,
+    leadActivityStartedAt: activeThreadShell?.runtime?.activityStartedAt ?? null,
+    turnItems: serverVisibleTurnItems,
+    setThreadError,
   });
   const runProjectScript = async (
     script: ProjectScript,
@@ -3427,32 +3435,7 @@ export default function ChatView(props: ChatViewProps) {
         return { ...current, [activeProject.id]: script.id };
       });
     }
-    if (script.service) {
-      const result = await controlService({
-        environmentId,
-        input: { threadId: activeThreadId, scriptId: script.id, action: "start" },
-      });
-      if (result._tag === "Failure") {
-        if (!isAtomCommandInterrupted(result))
-          setThreadError(activeThreadId, "Could not start app service.");
-        return;
-      }
-      const row = result.value.services.find((row) => row.scriptId === script.id);
-      if (row?.error) setThreadError(activeThreadId, row.error);
-      if (
-        row?.status === "running" &&
-        script.autoOpenPreview &&
-        script.previewUrl &&
-        isPreviewSupportedInRuntime()
-      ) {
-        await openUrlInPreview({
-          threadRef: { environmentId, threadId: activeThreadId },
-          url: resolveDiscoveredServerUrl(environmentId, script.previewUrl),
-          openPreview,
-        });
-      }
-      return;
-    }
+    if (script.service) return forkExtras.startAppService(script, activeThreadId);
     const targetCwd = options?.cwd ?? gitCwd ?? activeProject.workspaceRoot;
     const baseTerminalId =
       terminalUiState.activeTerminalId || activeKnownTerminalIds[0] || DEFAULT_THREAD_TERMINAL_ID;
@@ -3632,11 +3615,6 @@ export default function ChatView(props: ChatViewProps) {
     addDiffSurface();
   };
   const openChangesFromThreadPanelStable = useStableCallback(openChangesFromThreadPanel);
-  const addVetSurface = () => {
-    if (!activeThreadRef || !isServerThread || !isGitRepo) return;
-    useRightPanelStore.getState().open(activeThreadRef, "vet");
-  };
-  const addVetSurfaceStable = useStableCallback(addVetSurface);
   const addFilesSurface = () => {
     if (!activeThreadRef || !activeProject) return;
     useRightPanelStore.getState().open(activeThreadRef, "files");
@@ -5043,36 +5021,7 @@ export default function ChatView(props: ChatViewProps) {
     });
   };
   const onOpenRelatedThreadStable = useStableCallback(onOpenRelatedThread);
-  const onStopSidekick = (threadId: ThreadId) => {
-    void interruptThreadTurn({ environmentId, input: { threadId } });
-  };
-  const onStopSidekickStable = useStableCallback(onStopSidekick);
-  const activeRunId = activeActivityRun?.runId ?? null;
-  const activeRunStep =
-    activeRunId === null ? null : describeAgentStep(serverVisibleTurnItems ?? [], activeRunId);
-  const workingStep = isPreparingWorktree
-    ? "Setting up worktree"
-    : isCompacting
-      ? "Compacting conversation"
-      : (activeRunStep ?? "Working");
-  const composerWorkingStatus = isWorking
-    ? { step: workingStep, startedAt: activeWorkStartedAt }
-    : null;
-  const { item: fusionSidekickBannerItem, blockedThreadId: blockedSidekickThreadId } =
-    useFusionSidekickBanner({
-      // The guarded ref: subscribing to a draft before its thread exists caches "not found".
-      threadRef: routeThreadDetailRef,
-      leadWorking: isWorking,
-      leadActivityStartedAt: activeThreadShell?.runtime?.activityStartedAt ?? null,
-      onOpenThread: onOpenRelatedThreadStable,
-      onStopThread: onStopSidekickStable,
-    });
-  const allChildThreadInputs = useChildThreadInputs(activeThreadRef);
-  // The Fusion banner already shows its blocked sidekick's request.
-  const childThreadInputs =
-    blockedSidekickThreadId === null
-      ? allChildThreadInputs
-      : allChildThreadInputs.filter((child) => child.id !== blockedSidekickThreadId);
+  const childThreadInputs = forkExtras.hideBlockedSidekick(useChildThreadInputs(activeThreadRef));
   const childInputBannerItem = (() => {
     const first = childThreadInputs[0];
     const parentAwaitingUser =
@@ -5401,7 +5350,7 @@ export default function ChatView(props: ChatViewProps) {
   const composerBannerItems = (() => {
     const limitRecoveryItems = limitRecoveryBanner === null ? [] : [limitRecoveryBanner];
     const backgroundWorkItems = [
-      fusionSidekickBannerItem,
+      forkExtras.fusionSidekickBannerItem,
       childInputBannerItem,
       goalBannerItem,
       backgroundWorkBannerItem,
@@ -7002,15 +6951,7 @@ export default function ChatView(props: ChatViewProps) {
             })(),
           },
           modelSelection: ctxSelectedModelSelection,
-          ...(() => {
-            // Only an explicit Fusion choice is sent, and only to servers that lead with it.
-            const fusion =
-              useFusionDraftStore.getState().byTargetKey[composerTargetKey(composerDraftTarget)];
-            const supportsFusion =
-              appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment
-                .capabilities.fusion === true;
-            return supportsFusion && fusion !== undefined ? { fusion } : {};
-          })(),
+          ...fusionTurnStartField(composerDraftTarget, environmentId),
           titleSeed: title,
           runtimeMode,
           interactionMode: sendInteractionMode,
@@ -7574,11 +7515,10 @@ export default function ChatView(props: ChatViewProps) {
   const onEnvModeChangeStable = useStableCallback(onEnvModeChange);
   // Fusion's two agents build a whole feature; an unstarted thread gets its own
   // branch instead of editing the shared checkout. The selector can switch it back.
-  const onFusionEnabled = () => {
+  const onFusionEnabledStable = useStableCallback(() => {
     if (!isGitRepo || envMode !== "local") return;
     if (isLocalDraftThread || canOverrideServerThreadEnvMode) onEnvModeChange("worktree");
-  };
-  const onFusionEnabledStable = useStableCallback(onFusionEnabled);
+  });
 
   const onWorktreeSetupWorkLocally = () => {
     if (!worktreeSetup || worktreeSetup.phase !== "running" || !draftId) {
@@ -8199,7 +8139,6 @@ export default function ChatView(props: ChatViewProps) {
                           ) : null}
                           {!composerMounted ? null : (
                             <ChatComposer
-                              onFusionEnabled={onFusionEnabledStable}
                               canOperateThread={canOperateThread}
                               reportedModelSelection={reportedModelSelection}
                               multipleModelSelections={multipleModelSelections}
@@ -8262,9 +8201,8 @@ export default function ChatView(props: ChatViewProps) {
                               isPreparingWorktree={isPreparingWorktree && !sendQueuesBehindSetup}
                               queuedRunsControl={queuedRunsControl}
                               bannerItems={composerBannerItems}
-                              workingStatus={
-                                paintOnlyDisplayedTimeline ? null : composerWorkingStatus
-                              }
+                              workingStatus={forkExtras.composerWorkingStatus}
+                              onFusionEnabled={onFusionEnabledStable}
                               resumeCompactionTokens={resumeCompactionTokens}
                               keepFullHistory={keepFullHistory}
                               onToggleKeepFullHistory={toggleKeepFullHistoryStable}
@@ -8590,7 +8528,6 @@ export default function ChatView(props: ChatViewProps) {
           onAddPullRequest={addPullRequestSurfaceStable}
           onAddPullRequests={addPullRequestsSurfaceStable}
           onAddDevice={addDeviceSurfaceStable}
-          onAddVet={addVetSurfaceStable}
           browserAvailable={canOperatePreview && browserAvailable}
           terminalAvailable={activeProject !== null && canOperateTerminal}
           diffAvailable={isServerThread && isGitRepo}
@@ -8598,7 +8535,7 @@ export default function ChatView(props: ChatViewProps) {
           pullRequestAvailable={pullRequestSurfaceAvailable}
           pullRequestsAvailable={pullRequestsSurfaceAvailable}
           deviceAvailable={activeThreadRef !== null}
-          vetAvailable={isServerThread && isGitRepo}
+          {...forkExtras.vetTabProps}
         >
           {rightPanelContent}
         </RightPanelTabs>
@@ -8647,7 +8584,6 @@ export default function ChatView(props: ChatViewProps) {
             onAddPullRequest={addPullRequestSurfaceStable}
             onAddPullRequests={addPullRequestsSurfaceStable}
             onAddDevice={addDeviceSurfaceStable}
-            onAddVet={addVetSurfaceStable}
             browserAvailable={canOperatePreview && browserAvailable}
             terminalAvailable={activeProject !== null && canOperateTerminal}
             diffAvailable={isServerThread && isGitRepo}
@@ -8655,7 +8591,7 @@ export default function ChatView(props: ChatViewProps) {
             pullRequestAvailable={pullRequestSurfaceAvailable}
             pullRequestsAvailable={pullRequestsSurfaceAvailable}
             deviceAvailable={activeThreadRef !== null}
-            vetAvailable={isServerThread && isGitRepo}
+            {...forkExtras.vetTabProps}
           >
             {rightPanelContent}
           </RightPanelTabs>

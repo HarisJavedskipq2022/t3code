@@ -146,7 +146,12 @@ import {
   type ComposerTaskStep,
   type ComposerTasksProgress,
 } from "./ComposerTasksBadge";
-import { ComposerActivityRow, ComposerWorkingRow } from "./ComposerActivityStatus";
+import { ComposerActivityRow } from "./ComposerActivityStatus";
+import {
+  composerWorking,
+  useComposerFusionBlocks,
+  type ComposerForkProps,
+} from "./composerForkExtras";
 import {
   reconcileAttachmentContextReferences,
   type RetainedAttachmentContextPayloads,
@@ -252,9 +257,7 @@ import {
 } from "~/lib/composerContextRecords";
 import { matchComposerThreadItems } from "@t3tools/client-runtime/composerThreadItems";
 import { useThreadContextDrop, threadContextDropTargetProps } from "./threadContextDrag";
-import { readThreadShell, useServerConfigs, useThreadShells } from "~/state/entities";
-import { resolveComposerFusion, useFusionDraftStore } from "~/fusionDraftStore";
-import { ComposerFusionControl } from "./ComposerFusionControl";
+import { readThreadShell, useThreadShells } from "~/state/entities";
 import { requestConfirmDialog } from "~/confirmDialog";
 import { encodeComposerContextFragment } from "@t3tools/shared/composerContextClipboard";
 import type {
@@ -1481,7 +1484,7 @@ export interface ChatComposerHandle {
   setMultipleModelSelections: (selections: ReadonlyArray<ModelSelection>) => void;
 }
 
-export interface ChatComposerProps {
+export interface ChatComposerProps extends ComposerForkProps {
   composerDraftTarget: ScopedThreadRef | DraftId;
   environmentId: EnvironmentId;
   canOperateThread: boolean;
@@ -1505,8 +1508,6 @@ export interface ChatComposerProps {
   promptHistoryMessages: ReadonlyArray<ChatMessage>;
   isServerThread: boolean;
   isLocalDraftThread: boolean;
-  /** Called when Fusion turns on, so an unstarted thread can move to its own worktree. */
-  onFusionEnabled?: () => void;
   forceExpandedOnMobile: boolean;
   projectSelectionRequired: boolean;
 
@@ -1520,8 +1521,6 @@ export interface ChatComposerProps {
   isPreparingWorktree: boolean;
   isCompacting: boolean;
   bannerItems: readonly ComposerBannerStackItem[];
-  /** What the agent is doing while a turn runs; null when it is idle. */
-  workingStatus?: { readonly step: string; readonly startedAt: string | null } | null;
   resumeCompactionTokens: number | null;
   keepFullHistory: boolean;
   onToggleKeepFullHistory: () => void;
@@ -1905,7 +1904,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     promptHistoryMessages,
     isServerThread: _isServerThread,
     isLocalDraftThread: _isLocalDraftThread,
-    onFusionEnabled,
     forceExpandedOnMobile,
     projectSelectionRequired,
     phase,
@@ -2355,12 +2353,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     selectedModelOptionsForDispatch,
   );
   const selectedModelForPicker = selectedModel;
-  const fusionSupported =
-    useServerConfigs().get(environmentId)?.environment.capabilities.fusion === true;
-  const draftFusion = useFusionDraftStore((state) => state.byTargetKey[composerDraftTargetKey]);
-  const lastFusionSidekick = useFusionDraftStore((state) => state.lastSidekick);
-  const setFusionDraft = useFusionDraftStore((state) => state.setFusion);
-  const composerFusion = resolveComposerFusion(draftFusion, activeThread?.fusion);
   const modelOptionsByInstance = new Map<ProviderInstanceId, ReadonlyArray<AppModelOption>>();
   for (const entry of providerInstanceEntries) {
     modelOptionsByInstance.set(
@@ -4814,6 +4806,18 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     ? standaloneComposerImages.filter((image) => pendingSnapShotIdSet.has(image.id))
     : standaloneComposerImages;
   const composerControlsCollapsed = isComposerResting || isComposerCollapsedMobile;
+  const fusionBlocks = useComposerFusionBlocks({
+    environmentId,
+    composerDraftTargetKey,
+    threadFusion: activeThread?.fusion,
+    selectedModelSelection,
+    instanceEntries: providerInstanceEntries,
+    modelOptionsByInstance,
+    planModeEnabled: settings.planModeEnabled,
+    collapsed: composerControlsCollapsed,
+    disabled: isSendBusy,
+    onFusionEnabled: props.onFusionEnabled,
+  });
   const showInlineRestingControls = composerControlsCollapsed && restingControlsHost === null;
   const composerControlsVisibleInStrip =
     composerControlsCollapsed && restingControlsHost !== null && restingControlsVisible;
@@ -5067,32 +5071,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         />
       ),
     },
-    ...(fusionSupported
-      ? [
-          {
-            id: "fusion",
-            content: (
-              <>
-                <ComposerControlSeparator size={composerControlsCollapsed ? "xs" : "sm"} />
-                <ComposerFusionControl
-                  environmentId={environmentId}
-                  fusion={composerFusion}
-                  defaultSidekick={lastFusionSidekick ?? selectedModelSelection}
-                  instanceEntries={providerInstanceEntries}
-                  modelOptionsByInstance={modelOptionsByInstance}
-                  planModeEnabled={settings.planModeEnabled}
-                  size={composerControlsCollapsed ? "xs" : "sm"}
-                  disabled={isSendBusy}
-                  onFusionChange={(fusion) => {
-                    if (fusion !== null && composerFusion === null) onFusionEnabled?.();
-                    setFusionDraft(composerDraftTargetKey, fusion);
-                  }}
-                />
-              </>
-            ),
-          },
-        ]
-      : []),
+    ...fusionBlocks,
   ];
   const hiddenRestingBlockIds = restingBlockDefs
     .slice(restingBlockDefs.length - restingHiddenBlockCount)
@@ -5270,11 +5249,12 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     activeTasksProgress !== null &&
     activeTaskSteps !== null &&
     activeTasksProgress.totalSteps > 0;
-  // An agent waiting on an approval or an answer is not working; the drawer says so.
-  const workingStatus = hasBlockingComposerTopDrawer ? null : (props.workingStatus ?? null);
-  const workingRow = workingStatus ? (
-    <ComposerWorkingRow step={workingStatus.step} startedAt={workingStatus.startedAt} />
-  ) : null;
+  const working = composerWorking({
+    workingStatus: props.workingStatus,
+    hasBlockingTopDrawer: hasBlockingComposerTopDrawer,
+    inlineTasksBadge,
+    isDragOver: isDragOverComposer,
+  });
   const activityStackContent = hasBannerItems ? (
     shownSyncPhase ? (
       <ComposerActivityRow phase={shownSyncPhase} />
@@ -5286,7 +5266,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         steps={activeTaskSteps}
       />
     ) : (
-      workingRow
+      working.row
     )
   ) : null;
   const activityStackItem: ComposerBannerStackContent | null = activityStackContent
@@ -6425,14 +6405,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
             items={bannerStackItems}
             attachedAbove={props.queuedRunsControl}
           />
-          {!activityStackItem && (shownSyncPhase || inlineTasksBadge || workingRow) ? (
+          {!activityStackItem && (shownSyncPhase || working.inline) ? (
             <ComposerBanner.Attachment>
               <ComposerBanner.Root data-chat-composer-activity-strip="true">
-                {shownSyncPhase ? (
-                  <ComposerActivityRow phase={shownSyncPhase} />
-                ) : (
-                  (inlineTasksBadge ?? workingRow)
-                )}
+                {shownSyncPhase ? <ComposerActivityRow phase={shownSyncPhase} /> : working.inline}
               </ComposerBanner.Root>
             </ComposerBanner.Attachment>
           ) : null}
@@ -6621,10 +6597,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               "rounded-3xl transition-[background-color] duration-200",
               "in-data-[thread-context-over]:bg-accent/45 in-data-[thread-context-over]:ring-1 in-data-[thread-context-over]:ring-inset in-data-[thread-context-over]:ring-primary/70",
               isDragOverComposer ? "bg-accent/45 ring-1 ring-inset ring-primary/70" : null,
-              // A static accent edge while the agent works; nothing animates.
-              workingStatus && !isDragOverComposer
-                ? "shadow-lg shadow-primary/25 ring-1 ring-inset ring-primary/45"
-                : null,
+              working.edgeClassName,
               projectSelectionRequired ? "opacity-75" : null,
               composerProviderState.composerSurfaceClassName,
             )}

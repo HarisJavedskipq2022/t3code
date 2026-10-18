@@ -43,7 +43,6 @@ import { acpRegistryManagedBinaryDirectories } from "@t3tools/provider-acp-regis
 import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
-import * as Duration from "effect/Duration";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Base64Url from "effect/encoding/Base64Url";
@@ -74,6 +73,7 @@ import * as ProcessRunner from "../processRunner.ts";
 import * as PortScanner from "../preview/PortScanner.ts";
 import * as NativeTelemetryClient from "../resourceTelemetry/NativeTelemetryClient.ts";
 import * as PtyAdapter from "@t3tools/shared/PtyAdapter";
+import { commandArgsForShell, DEFAULT_STOP_TIMEOUT_MS, makeStopLocked } from "./commandTerminal.ts";
 
 export {
   TerminalCwdError,
@@ -98,13 +98,6 @@ const DEFAULT_PERSIST_DEBOUNCE_MS = 250;
 const DEFAULT_SUBPROCESS_POLL_INTERVAL_MS = 1_000;
 const MAX_SUBPROCESS_POLL_INTERVAL_MS = 60_000;
 const DEFAULT_PROCESS_KILL_GRACE_MS = 1_000;
-/**
- * Bound on `stop`. Must outlast the SIGTERM->grace->SIGKILL escalation so a
- * stubborn process still gets forced before the wait gives up.
- */
-const DEFAULT_STOP_TIMEOUT_MS = 5_000;
-/** How often `stop` checks whether the command's process group has exited. */
-const STOP_GROUP_POLL_INTERVAL_MS = 50;
 const DEFAULT_MAX_RETAINED_INACTIVE_SESSIONS = 128;
 const DEFAULT_OPEN_COLS = 120;
 const DEFAULT_OPEN_ROWS = 30;
@@ -528,34 +521,6 @@ function shellCandidateFromCommand(
     return { shell: command, args: ["-o", "nopromptsp"] };
   }
   return { shell: command };
-}
-
-/**
- * Shell-specific command-mode arguments for a resolved candidate. The command
- * runs as the shell's own process, so the PTY exit code is the command's. The
- * arguments append to the candidate's interactive ones (e.g. zsh prompt setup).
- */
-function commandArgsForShell(
-  candidate: ShellCandidate,
-  command: string,
-  platform: NodeJS.Platform,
-): string[] {
-  const base = candidate.args ?? [];
-  if (platform === "win32") {
-    const name = basenameForPlatform(candidate.shell, platform).toLowerCase();
-    if (name === "pwsh.exe" || name === "powershell.exe") {
-      // Native `-Command` semantics: the process exit code is PowerShell's own
-      // (a failed native command normalizes to 1). We surface that actual code
-      // rather than wrap the command and guess at `$LASTEXITCODE`.
-      return [...base, "-Command", command];
-    }
-    if (name === "cmd.exe" || name === "cmd") {
-      return [...base, "/d", "/s", "/c", command];
-    }
-  }
-  // POSIX shells and fish take the command as one `-c` argument; so does any
-  // Windows shell without a more specific form.
-  return [...base, "-c", command];
 }
 
 function windowsSystemRoot(env: NodeJS.ProcessEnv): string {
@@ -3275,83 +3240,14 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
       ),
     );
 
-  /**
-   * Stop whatever process/group this session currently owns, without taking the
-   * thread lock (callers already hold it). Waits for the shell exit and, for a
-   * group-signaled command terminal, for the owned group to disappear.
-   */
-  const stopLocked = Effect.fn("terminal.stopLocked")(function* (input: {
-    readonly threadId: string;
-    readonly terminalId: string;
-  }): Effect.fn.Return<void, TerminalStopError> {
-    const sessionOption = yield* getSession(input.threadId, input.terminalId);
-    if (Option.isNone(sessionOption)) return;
-    const session = sessionOption.value;
-    // A running process takes precedence; otherwise a retained group handle left
-    // by an earlier stop that timed out (the shell already exited).
-    const liveProcess = session.status === "running" ? session.process : null;
-    const target = liveProcess ?? session.retainedGroupProcess;
-    if (target === null) return;
-    // Only a still-running shell emits an exit event; a retained group is
-    // signalled and polled directly without waiting for an exit that happened.
-    const awaitExit = liveProcess !== null;
-
-    const exited = yield* Deferred.make<void>();
-    const waitForTarget = Effect.gen(function* () {
-      // Never touch a newer process than the one this stop captured.
-      const current = yield* getSession(input.threadId, input.terminalId);
-      if (
-        Option.isNone(current) ||
-        (current.value.process !== target && current.value.retainedGroupProcess !== target)
-      ) {
-        return;
-      }
-      yield* startKillEscalation(target, input.threadId, input.terminalId);
-      // Only await the exit while this exact shell is still the running process.
-      // If it already exited (target is now the retained group), the exit event
-      // has fired and must not be waited on again.
-      if (current.value.process === target) {
-        yield* Deferred.await(exited);
-      }
-      while (target.isProcessGroupAlive?.() === true) {
-        yield* Effect.sleep(Duration.millis(STOP_GROUP_POLL_INTERVAL_MS));
-      }
-    });
-
-    // acquireUseRelease removes the exit listener on normal return, timeout,
-    // interruption or defect, so repeated stops cannot leave it behind.
-    const waited = yield* Effect.acquireUseRelease(
-      awaitExit
-        ? subscribe((event) =>
-            event.threadId === input.threadId &&
-            event.terminalId === input.terminalId &&
-            event.type === "exited"
-              ? Deferred.succeed(exited, undefined).pipe(Effect.asVoid)
-              : Effect.void,
-          )
-        : Effect.succeed<() => void>(() => {}),
-      () => waitForTarget,
-      (unsubscribe) => Effect.sync(unsubscribe),
-    ).pipe(Effect.timeoutOption(Duration.millis(stopTimeoutMs)));
-
-    if (Option.isNone(waited)) {
-      return yield* new TerminalStopError({
-        threadId: input.threadId,
-        terminalId: input.terminalId,
-        timeoutMs: stopTimeoutMs,
-      });
-    }
-    // Group gone: drop the retained handle for this exact generation.
-    yield* modifyManagerState((state) => {
-      const live = state.sessions.get(toSessionKey(input.threadId, input.terminalId));
-      if (!live || live.retainedGroupProcess !== target) {
-        return [undefined, state] as const;
-      }
-      live.retainedGroupProcess = null;
-      return [undefined, state] as const;
-    });
+  const stopLocked = makeStopLocked({
+    getSession,
+    startKillEscalation,
+    subscribe,
+    modifyManagerState,
+    toSessionKey,
+    stopTimeoutMs,
   });
-
   const stop: TerminalManager["Service"]["stop"] = (input) =>
     withThreadLock(input.threadId, stopLocked(input));
 

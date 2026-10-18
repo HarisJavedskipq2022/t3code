@@ -23,14 +23,7 @@ import {
   squashAtomCommandFailure,
   type AtomCommandResult,
 } from "@t3tools/client-runtime/state/runtime";
-import {
-  type ComponentProps,
-  useCallback,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { type ComponentProps, useLayoutEffect, useRef, useState } from "react";
 
 import { type DraftId, useComposerDraftStore } from "~/composerDraftStore";
 import { useDiffPanelStore } from "~/diffPanelStore";
@@ -128,55 +121,46 @@ function useVetFindingActions(input: {
   const addReviewComment = useComposerDraftStore((store) => store.addReviewComment);
   const [error, setError] = useState<string | null>(null);
 
-  const setStatus = useCallback(
-    async (finding: VetFinding, status: VetFindingStatus, note?: string) => {
-      if (!run) return false;
-      setError(null);
-      const result = await updateFinding({
-        environmentId: threadRef.environmentId,
-        input: {
-          threadId: threadRef.threadId,
-          runId: run.id,
-          findingId: finding.id,
-          status,
-          ...(note === undefined ? {} : { note }),
-        },
-      });
-      const failure = commandError(result, "Could not save the verdict.");
-      setError(failure);
-      return failure === null;
-    },
-    [run, threadRef, updateFinding],
-  );
+  const setStatus = async (finding: VetFinding, status: VetFindingStatus, note?: string) => {
+    if (!run) return false;
+    setError(null);
+    const result = await updateFinding({
+      environmentId: threadRef.environmentId,
+      input: {
+        threadId: threadRef.threadId,
+        runId: run.id,
+        findingId: finding.id,
+        status,
+        ...(note === undefined ? {} : { note }),
+      },
+    });
+    const failure = commandError(result, "Could not save the verdict.");
+    setError(failure);
+    return failure === null;
+  };
 
-  const sendToAgent = useCallback(
-    (finding: VetFinding) => {
-      const line = finding.line ?? 1;
-      addReviewComment(composerDraftTarget, {
-        id: `vet:${finding.id}`,
-        sectionId: "vet",
-        sectionTitle: "Vet finding",
-        filePath: finding.filePath ?? "change",
-        startIndex: line - 1,
-        endIndex: line - 1,
-        rangeLabel: finding.line === null ? "" : `L${finding.line}`,
-        text: `Vet finding (${finding.issueCode}, severity ${finding.severity}/5, confidence ${Math.round(finding.confidence * 100)}%): ${finding.description}\n\nCheck this against the code first. Fix it only if it holds, and say so if it does not.`,
-        diff: "",
-        fenceLanguage: inferReviewCommentFenceLanguage(finding.filePath ?? ""),
-      });
-      if (finding.status === "open") void setStatus(finding, "confirmed");
-    },
-    [addReviewComment, composerDraftTarget, setStatus],
-  );
+  const sendToAgent = (finding: VetFinding) => {
+    const line = finding.line ?? 1;
+    addReviewComment(composerDraftTarget, {
+      id: `vet:${finding.id}`,
+      sectionId: "vet",
+      sectionTitle: "Vet finding",
+      filePath: finding.filePath ?? "change",
+      startIndex: line - 1,
+      endIndex: line - 1,
+      rangeLabel: finding.line === null ? "" : `L${finding.line}`,
+      text: `Vet finding (${finding.issueCode}, severity ${finding.severity}/5, confidence ${Math.round(finding.confidence * 100)}%): ${finding.description}\n\nCheck this against the code first. Fix it only if it holds, and say so if it does not.`,
+      diff: "",
+      fenceLanguage: inferReviewCommentFenceLanguage(finding.filePath ?? ""),
+    });
+    if (finding.status === "open") void setStatus(finding, "confirmed");
+  };
 
-  const openInDiff = useCallback(
-    (finding: VetFinding) => {
-      if (!finding.filePath) return;
-      useDiffPanelStore.getState().revealBranchLine(threadRef, finding.filePath, finding.line);
-      useRightPanelStore.getState().open(threadRef, "diff");
-    },
-    [threadRef],
-  );
+  const openInDiff = (finding: VetFinding) => {
+    if (!finding.filePath) return;
+    useDiffPanelStore.getState().revealBranchLine(threadRef, finding.filePath, finding.line);
+    useRightPanelStore.getState().open(threadRef, "diff");
+  };
 
   return {
     canOperate,
@@ -370,29 +354,27 @@ export function useVetLineNotes(
   composerDraftTarget: ScopedThreadRef | DraftId,
 ): ReadonlyArray<DiffLineNote> {
   const run = useVetSnapshot(threadRef).data?.run ?? null;
-  return useMemo(() => {
-    if (!threadRef || !run) return EMPTY_LINE_NOTES;
-    return run.findings.flatMap((finding): DiffLineNote[] =>
-      finding.filePath && finding.line !== null && finding.status !== "dismissed"
-        ? [
-            {
-              id: `vet:${finding.id}`,
-              filePath: finding.filePath,
-              line: finding.line,
-              version: finding.status,
-              render: () => (
-                <VetInlineFinding
-                  threadRef={threadRef}
-                  run={run}
-                  finding={finding}
-                  composerDraftTarget={composerDraftTarget}
-                />
-              ),
-            },
-          ]
-        : [],
-    );
-  }, [composerDraftTarget, run, threadRef]);
+  if (!threadRef || !run) return EMPTY_LINE_NOTES;
+  return run.findings.flatMap((finding): DiffLineNote[] =>
+    finding.filePath && finding.line !== null && finding.status !== "dismissed"
+      ? [
+          {
+            id: `vet:${finding.id}`,
+            filePath: finding.filePath,
+            line: finding.line,
+            version: finding.status,
+            render: () => (
+              <VetInlineFinding
+                threadRef={threadRef}
+                run={run}
+                finding={finding}
+                composerDraftTarget={composerDraftTarget}
+              />
+            ),
+          },
+        ]
+      : [],
+  );
 }
 
 function FindingGroup({

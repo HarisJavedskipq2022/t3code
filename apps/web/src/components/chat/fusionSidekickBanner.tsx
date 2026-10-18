@@ -3,7 +3,6 @@ import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import type { OrchestrationV2Subagent, ScopedThreadRef, ThreadId } from "@t3tools/contracts";
 import { Atom } from "effect/reactivity";
 import { CombineIcon } from "lucide-react";
-import { useMemo } from "react";
 
 import { useNowMinute } from "~/hooks/useNowMinute";
 import { useThreadShell, useThreadVisibleTurnItems } from "~/state/entities";
@@ -50,13 +49,10 @@ export function useFusionSidekickBanner(input: {
     threadRef === null ? NO_SIDEKICK_ATOM : environmentThreadDetails.fusionSidekickAtom(threadRef),
   );
   const childThreadId = sidekick?.childThreadId ?? null;
-  const childRef = useMemo(
-    () =>
-      threadRef === null || childThreadId === null
-        ? null
-        : scopeThreadRef(threadRef.environmentId, childThreadId),
-    [threadRef, childThreadId],
-  );
+  const childRef =
+    threadRef === null || childThreadId === null
+      ? null
+      : scopeThreadRef(threadRef.environmentId, childThreadId);
   const child = useThreadShell(childRef);
   const activity = resolveFusionSidekickActivity({
     sidekick,
@@ -77,7 +73,7 @@ export function useFusionSidekickBanner(input: {
   const stalled = commandMinutes !== null && commandMinutes >= SIDEKICK_STALL_MINUTES;
   const title = activity?.title ?? null;
   const reason = activity?.reason ?? null;
-  const item = useMemo<ComposerBannerStackItem | null>(() => {
+  const item = ((): ComposerBannerStackItem | null => {
     if (kind === null || childThreadId === null) return null;
     const elapsed = commandMinutes ? ` · ${commandMinutes}m` : "";
     return {
@@ -106,17 +102,6 @@ export function useFusionSidekickBanner(input: {
         </>
       ),
     };
-  }, [
-    kind,
-    blocker,
-    childThreadId,
-    step,
-    title,
-    reason,
-    commandMinutes,
-    stalled,
-    onOpenThread,
-    onStopThread,
-  ]);
+  })();
   return { item, blockedThreadId: blocker === null ? null : childThreadId };
 }
