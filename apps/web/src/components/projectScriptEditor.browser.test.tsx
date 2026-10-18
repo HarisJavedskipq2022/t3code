@@ -4,7 +4,6 @@ import { AsyncResult } from "effect/reactivity";
 import { act, StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { userEvent } from "vite-plus/test/browser";
 
 vi.mock(import("~/state/session"), async (original) => ({
   ...(await original()),
@@ -187,6 +186,13 @@ describe("project action editor services", () => {
     initial: { ...EMPTY_PROJECT_SCRIPT_INPUT, name: "Web", command: "pnpm dev", ...initial },
   });
   const servicePortInput = () => document.querySelector<HTMLInputElement>("#script-service-port")!;
+  // React tracks input values itself, so a typed value goes through the native setter.
+  const typeServicePort = (value: string) =>
+    act(async () => {
+      const input = servicePortInput();
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
 
   it("preserves service fields when opening the editor for a service action", () => {
     const script: ProjectScript = {
@@ -206,8 +212,12 @@ describe("project action editor services", () => {
   it("submits a service with its base port", async () => {
     onSubmit.mockResolvedValue(AsyncResult.success(undefined));
     await open(serviceRequest({}));
-    await userEvent.click(document.querySelector<HTMLElement>("#script-service")!);
-    await userEvent.fill(servicePortInput(), "3000");
+    // The id sits on the switch's hidden checkbox; people click the visible switch.
+    const serviceSwitch = [...document.querySelectorAll<HTMLElement>('[role="switch"]')].find(
+      (element) => element.closest("label")?.textContent?.includes("App service"),
+    )!;
+    await act(async () => serviceSwitch.click());
+    await typeServicePort("3000");
     await act(async () => submit());
     expect(onSubmit).toHaveBeenCalledExactlyOnceWith(
       "web",
@@ -234,7 +244,7 @@ describe("project action editor services", () => {
 
   it("rejects a base port outside 1..65535", async () => {
     await open(serviceRequest({ service: true, servicePort: 3000 }));
-    await userEvent.fill(servicePortInput(), "70000");
+    await typeServicePort("70000");
     await act(async () => submit());
     expect(onSubmit).not.toHaveBeenCalled();
     expect(messages().join(" ")).toContain("between 1 and 65535");
