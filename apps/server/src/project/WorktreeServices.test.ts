@@ -367,7 +367,7 @@ describe("worktree services", () => {
         const scans = h.state.scans;
         yield* TestClock.adjust("10 seconds");
         expect(h.state.scans).toBe(scans);
-      }).pipe(Effect.provide(h.layer), Effect.provide(TestClock.layer()));
+      }).pipe(Effect.provide(Layer.mergeAll(h.layer, TestClock.layer())));
     },
   );
 });
