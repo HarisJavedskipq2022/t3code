@@ -10,9 +10,11 @@ import {
   type SidebarSection,
 } from "../Sidebar.logic";
 import {
+  foldProjectGroups,
   groupByFirstAppearance,
   insertProjectGroupHeaders,
   parseProjectGroupMarker,
+  projectGroupMarker,
   regroupActiveDrop,
 } from "./sidebarProjectGroups";
 
@@ -143,39 +145,113 @@ describe("sidebar project groups", () => {
 
   it("keeps project headers in place while a row is dragged", () => {
     const items = activeList([row("a1", "A"), row("a2", "A"), row("b1", "B")]);
-    let top = 0;
-    const rects = items.map((item) => {
-      const height =
-        item.kind === "thread" ? 82 : item.marker.startsWith("project-group:") ? 28 : 0;
-      const rect = { top, height, bottom: top + height, left: 0, right: 260, width: 260 };
-      top += height + 1;
-      return rect;
-    });
-    const indexOf = (key: string) => items.findIndex((item) => sidebarListItemId(item) === key);
-    const strategy = createSidebarSortingStrategy({
-      items,
-      settledOrder: [],
-      settledExpanded: false,
-      groupByProject: true,
-    });
-    const args = {
-      activeIndex: indexOf("a2"),
-      overIndex: indexOf("a1"),
-      activeNodeRect: rects[indexOf("a2")]!,
-      rects,
-      index: 0,
-    } satisfies Parameters<SortingStrategy>[0];
+    const preview = dragPreview(items, (item) => (item.kind === "thread" ? 82 : 28), "a2", "a1");
 
     // Project B is untouched, so its row's shift is the baseline for everything that stays put.
-    const baseline = strategy({ ...args, index: indexOf("b1") })!.y;
-    for (const [index, item] of items.entries()) {
-      if (item.kind !== "marker" || parseProjectGroupMarker(item.marker) === null) continue;
-      expect(strategy({ ...args, index })).toMatchObject({ y: baseline, scaleY: 1 });
-    }
+    const baseline = preview("b1").y;
+    expect(preview(header("A"))).toMatchObject({ y: baseline, scaleY: 1 });
+    expect(preview(header("B"))).toMatchObject({ y: baseline, scaleY: 1 });
     // a1 slides down one card to make room for a2 above it.
-    expect(strategy({ ...args, index: indexOf("a1") })).toMatchObject({
-      y: baseline + 83,
-      scaleY: 1,
-    });
+    expect(preview("a1")).toMatchObject({ y: baseline + 83, scaleY: 1 });
+  });
+
+  it("folds a project group to its header, keeping threads that need the user", () => {
+    const threads = [shell("a1", "pa"), shell("a2", "pa"), shell("b1", "pb")];
+    const fold = (section: SidebarSection) =>
+      foldProjectGroups({
+        section,
+        threads,
+        groupKeys: new Map([
+          ["env:pa", "A"],
+          ["env:pb", "B"],
+        ]),
+        collapsedGroups: new Set([projectGroupMarker("A", "active")]),
+        keep: (thread) => thread.id === "a2",
+      });
+
+    expect(fold("active").visible.map((thread) => thread.id)).toEqual(["a2", "b1"]);
+    expect(fold("active").headers).toEqual([
+      { key: "A", count: 2, collapsed: true },
+      { key: "B", count: 1, collapsed: false },
+    ]);
+    // Folding A in Active leaves A's settled threads alone.
+    expect(fold("settled").visible).toHaveLength(3);
+  });
+
+  it("keeps a fully folded group's header between its neighbours", () => {
+    const rows = [row("a1", "A"), row("c1", "C")];
+
+    expect(
+      shape(
+        insertProjectGroupHeaders("active", rows, (item) => item.projectGroup, ["A", "B", "C"]),
+      ),
+    ).toEqual(["# A", "a1", "# B", "# C", "c1"]);
+  });
+
+  it("previews a drag with folded headers and compact cards at their real sizes", () => {
+    const items: SidebarListItem[] = [
+      { kind: "marker", marker: "pinned-header" },
+      row("p1", "A", "pinned"),
+      { kind: "marker", marker: "pinned-divider" },
+      { kind: "marker", marker: "active-placeholder" },
+      ...insertProjectGroupHeaders(
+        "active",
+        [row("a1", "A"), row("a2", "A"), row("c1", "C")],
+        (item) => item.projectGroup,
+        ["A", "B", "C"],
+      ),
+      { kind: "marker", marker: "settled-header" },
+      { kind: "marker", marker: "settled-placeholder" },
+    ];
+    // Pinned cards keep the full height; grouped cards are compact.
+    const preview = dragPreview(
+      items,
+      (item) => (item.kind === "marker" ? 28 : item.section === "pinned" ? 82 : 54),
+      "a2",
+      "a1",
+    );
+
+    const baseline = preview("c1").y;
+    expect(preview(header("B"))).toMatchObject({ y: baseline, scaleY: 1 });
+    expect(preview("a1")).toMatchObject({ y: baseline + 55, scaleY: 1 });
   });
 });
+
+const header = (groupKey: string) => sidebarListItemId(marker(groupKey));
+const marker = (groupKey: string): SidebarListItem => ({
+  kind: "marker",
+  marker: projectGroupMarker(groupKey, "active"),
+});
+const shell = (id: string, projectId: string) => ({ id, environmentId: "env", projectId });
+
+// Zero-height markers stand in for the pinned boundaries and placeholders.
+function dragPreview(
+  items: readonly SidebarListItem[],
+  heightOf: (item: SidebarListItem) => number,
+  activeKey: string,
+  overKey: string,
+) {
+  let top = 0;
+  const rects = items.map((item) => {
+    const height =
+      item.kind === "marker" && parseProjectGroupMarker(item.marker) === null ? 0 : heightOf(item);
+    const rect = { top, height, bottom: top + height, left: 0, right: 260, width: 260 };
+    top += height + 1;
+    return rect;
+  });
+  const indexOf = (key: string) => items.findIndex((item) => sidebarListItemId(item) === key);
+  const strategy = createSidebarSortingStrategy({
+    items,
+    settledOrder: [],
+    settledExpanded: false,
+    groupByProject: true,
+  });
+  const args = {
+    activeIndex: indexOf(activeKey),
+    overIndex: indexOf(overKey),
+    activeNodeRect: rects[indexOf(activeKey)]!,
+    rects,
+    index: 0,
+  } satisfies Parameters<SortingStrategy>[0];
+  return (key: string) => strategy({ ...args, index: indexOf(key) })!;
+}

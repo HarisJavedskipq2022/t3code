@@ -1,11 +1,17 @@
+import { ChevronDownIcon } from "lucide-react";
+import { Schema } from "effect";
+
+import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { useClientSettings } from "../../hooks/useSettings";
+import { cn } from "../../lib/utils";
 import type { SidebarProjectSnapshot } from "../../sidebarProjectGrouping";
 import { ProjectFavicon } from "../ProjectFavicon";
-import type {
-  SidebarDropTarget,
-  SidebarListItem,
-  SidebarListMarker,
-  SidebarSection,
+import {
+  resolveSidebarThreadStatus,
+  type SidebarDropTarget,
+  type SidebarListItem,
+  type SidebarListMarker,
+  type SidebarSection,
 } from "../Sidebar.logic";
 
 type ThreadItem = Extract<SidebarListItem, { kind: "thread" }>;
@@ -15,13 +21,18 @@ const MARKER_PREFIX = "project-group:";
 
 // The section goes last so a project key can never make the marker look like
 // a placeholder, whose id the sortable rows match by suffix.
-function projectGroupMarker(groupKey: string, section: SidebarSection): SidebarListMarker {
+export function projectGroupMarker(groupKey: string, section: SidebarSection): SidebarListMarker {
   return `${MARKER_PREFIX}${groupKey}@${section}`;
 }
 
-export function parseProjectGroupMarker(marker: SidebarListMarker): string | null {
+function parseMarker(marker: SidebarListMarker) {
   if (!marker.startsWith(MARKER_PREFIX)) return null;
-  return marker.slice(MARKER_PREFIX.length, marker.lastIndexOf("@"));
+  const at = marker.lastIndexOf("@");
+  return { groupKey: marker.slice(MARKER_PREFIX.length, at), section: marker.slice(at + 1) };
+}
+
+export function parseProjectGroupMarker(marker: SidebarListMarker): string | null {
+  return parseMarker(marker)?.groupKey ?? null;
 }
 
 /** Thread project ref to its sidebar project group key, or null while grouping is off. */
@@ -71,22 +82,38 @@ export function groupThreadsByProject<T extends ProjectRef>(
   return groupByFirstAppearance(threads, (thread) => resolveThreadProjectGroup(thread, groupKeys));
 }
 
+// Groups present in the rows keep their order; a folded group with no rows
+// left stays after the group it followed.
+function mergeGroupOrder(present: readonly string[], known: readonly string[]): string[] {
+  const order = [...present];
+  known.forEach((key, index) => {
+    if (order.includes(key)) return;
+    const previous = known.slice(0, index).findLast((candidate) => order.includes(candidate));
+    order.splice(previous === undefined ? 0 : order.indexOf(previous) + 1, 0, key);
+  });
+  return order;
+}
+
 // Pinned is ordered by hand, so it stays one list.
 export function insertProjectGroupHeaders(
   section: SidebarSection,
   items: readonly ThreadItem[],
   groupOf: (item: ThreadItem) => string | undefined,
+  knownGroups: readonly string[] = [],
 ): SidebarListItem[] {
   if (section === "pinned") return [...items];
-  const result: SidebarListItem[] = [];
-  let current: string | undefined;
-  for (const item of groupByFirstAppearance(items, (entry) => groupOf(entry) ?? "")) {
+  const rowsByGroup = new Map<string | undefined, ThreadItem[]>();
+  for (const item of items) {
     const group = groupOf(item);
-    if (group !== undefined && group !== current) {
-      result.push({ kind: "marker", marker: projectGroupMarker(group, section) });
-    }
-    current = group;
-    result.push(item);
+    const rows = rowsByGroup.get(group);
+    if (rows) rows.push(item);
+    else rowsByGroup.set(group, [item]);
+  }
+  const present = [...rowsByGroup.keys()].filter((group) => group !== undefined);
+  const result: SidebarListItem[] = [...(rowsByGroup.get(undefined) ?? [])];
+  for (const group of mergeGroupOrder(present, knownGroups)) {
+    result.push({ kind: "marker", marker: projectGroupMarker(group, section) });
+    result.push(...(rowsByGroup.get(group) ?? []));
   }
   return result;
 }
@@ -104,12 +131,79 @@ function projectGroupByThreadKey(items: readonly SidebarListItem[]) {
 /** For the drag projection, whose settled rows are rebuilt from keys alone. */
 export function createProjectGroupExpander(items: readonly SidebarListItem[]) {
   const groupByKey = projectGroupByThreadKey(items);
+  const groupsBySection = new Map<string, string[]>();
+  for (const item of items) {
+    const parsed = item.kind === "marker" ? parseMarker(item.marker) : null;
+    if (parsed === null) continue;
+    const groups = groupsBySection.get(parsed.section);
+    if (groups) groups.push(parsed.groupKey);
+    else groupsBySection.set(parsed.section, [parsed.groupKey]);
+  }
   return (section: SidebarSection, list: readonly ThreadItem[]) =>
     insertProjectGroupHeaders(
       section,
       list,
       (item) => item.projectGroup ?? groupByKey.get(item.key),
+      groupsBySection.get(section),
     );
+}
+
+const COLLAPSED_PROJECT_GROUPS_KEY = "t3code:sidebar:collapsed-project-groups";
+const NO_COLLAPSED_PROJECT_GROUPS: readonly string[] = [];
+const CollapsedProjectGroups = Schema.Array(Schema.String);
+
+/** Folded groups are per device, keyed by section so folding Settled leaves Active alone. */
+export function useCollapsedProjectGroups() {
+  const [collapsedMarkers, setCollapsedMarkers] = useLocalStorage(
+    COLLAPSED_PROJECT_GROUPS_KEY,
+    NO_COLLAPSED_PROJECT_GROUPS,
+    CollapsedProjectGroups,
+  );
+  return {
+    collapsedGroups: new Set(collapsedMarkers),
+    toggleProjectGroup: (marker: SidebarListMarker) =>
+      setCollapsedMarkers((current) =>
+        current.includes(marker)
+          ? current.filter((candidate) => candidate !== marker)
+          : [...current, marker],
+      ),
+  };
+}
+
+// A folded group must not hide a thread that is waiting on the user.
+export function threadNeedsUser(thread: Parameters<typeof resolveSidebarThreadStatus>[0]) {
+  const status = resolveSidebarThreadStatus(thread);
+  return status === "approval" || status === "input" || status === "failed";
+}
+
+export interface ProjectGroupHeader {
+  readonly key: string;
+  readonly count: number;
+  readonly collapsed: boolean;
+}
+
+/** Hides the rows of folded groups, keeping the ones `keep` allows, and reports every group's header. */
+export function foldProjectGroups<T extends ProjectRef>(input: {
+  readonly section: SidebarSection;
+  readonly threads: readonly T[];
+  readonly groupKeys: ReadonlyMap<string, string> | null;
+  readonly collapsedGroups: ReadonlySet<string>;
+  readonly keep: (thread: T) => boolean;
+}): { readonly visible: readonly T[]; readonly headers: readonly ProjectGroupHeader[] } {
+  const { section, threads, groupKeys } = input;
+  if (groupKeys === null) return { visible: threads, headers: [] };
+  const counts = new Map<string, number>();
+  for (const thread of threads) {
+    const key = resolveThreadProjectGroup(thread, groupKeys);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  const isCollapsed = (key: string) => input.collapsedGroups.has(projectGroupMarker(key, section));
+  return {
+    visible: threads.filter(
+      (thread) => !isCollapsed(resolveThreadProjectGroup(thread, groupKeys)) || input.keep(thread),
+    ),
+    headers: [...counts].map(([key, count]) => ({ key, count, collapsed: isCollapsed(key) })),
+  };
 }
 
 type OrderKeys = ReadonlyMap<string, string | null | undefined>;
@@ -148,13 +242,39 @@ export function regroupActiveDrop(input: {
   };
 }
 
-export function SidebarProjectGroupLabel(props: { project: SidebarProjectSnapshot | null }) {
-  const { project } = props;
+export function indexProjectGroupHeaders(
+  bySection: Readonly<Partial<Record<SidebarSection, readonly ProjectGroupHeader[]>>>,
+): ReadonlyMap<SidebarListMarker, ProjectGroupHeader> {
+  return new Map(
+    (Object.entries(bySection) as [SidebarSection, readonly ProjectGroupHeader[]][]).flatMap(
+      ([section, headers]) =>
+        headers.map((header) => [projectGroupMarker(header.key, section), header] as const),
+    ),
+  );
+}
+
+export function SidebarProjectGroupHeader(props: {
+  project: SidebarProjectSnapshot | null;
+  header: ProjectGroupHeader | undefined;
+  onToggle: () => void;
+}) {
+  const { project, header } = props;
+  const collapsed = header?.collapsed === true;
   return (
-    <div className="flex h-7 items-end gap-1.5 px-2 pb-1 text-xs font-medium text-sidebar-muted-foreground/60">
+    <button
+      type="button"
+      aria-expanded={!collapsed}
+      onClick={props.onToggle}
+      className="flex h-7 w-full cursor-pointer items-end gap-1.5 rounded-md px-2 pb-1 text-left text-xs font-medium text-sidebar-muted-foreground/60 hover:text-sidebar-foreground/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
+    >
       {project ? <ProjectFavicon project={project} className="size-3.5 shrink-0" /> : null}
       <span className="min-w-0 truncate">{project?.displayName ?? "Unknown project"}</span>
+      {collapsed && header ? <span className="shrink-0 tabular-nums">{header.count}</span> : null}
       <span aria-hidden className="mb-1.5 h-px min-w-2 flex-1 bg-sidebar-border/60" />
-    </div>
+      <ChevronDownIcon
+        aria-hidden
+        className={cn("mb-0.5 size-3 shrink-0 transition-transform", collapsed && "-rotate-90")}
+      />
+    </button>
   );
 }

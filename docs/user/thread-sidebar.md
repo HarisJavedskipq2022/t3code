@@ -133,6 +133,10 @@ thread above another project's group moves its whole project up. Pinned threads 
 and the headers hide while the sidebar is filtered to one project. Reordering while grouped saves
 the grouped order, so it stays when you turn grouping off.
 
+Click a project header to fold that project in its section; each device remembers its folds. A
+folded project still shows the thread you have open and any thread waiting on an approval, an
+answer, or a failure.
+
 ## Settle finished work
 
 Choose **Settle thread** from its menu to move finished work out of the active list

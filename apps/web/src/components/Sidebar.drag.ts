@@ -131,7 +131,14 @@ export function createSidebarSortingStrategy(input: {
     let cardHeight = input.cardHeight;
     let slimHeight = input.slimHeight;
     let headerScale: number | undefined;
+    // Cards differ by section (project groups shorten them), so a moved row
+    // takes the height its destination's rows already have.
+    const sectionHeights = new Map<SidebarSection, number>();
     for (const [index, item] of items.entries()) {
+      if (item.kind === "thread" && item.key !== active.key && rects[index]) {
+        if (!sectionHeights.has(item.section))
+          sectionHeights.set(item.section, rects[index].height);
+      }
       if (item.kind === "marker") {
         if (isShelfHeader(item)) {
           const height = rects[index]?.height;
@@ -176,8 +183,8 @@ export function createSidebarSortingStrategy(input: {
     const projected: SidebarListItem[] = [];
     const marker = (name: SidebarListMarker) => projected.push({ kind: "marker", marker: name });
     const section = (name: "active" | "settled") => {
-      if (groups[name].length > 0) projected.push(...expand(name, groups[name]));
-      else marker(`${name}-placeholder`);
+      if (groups[name].length === 0) marker(`${name}-placeholder`);
+      projected.push(...expand(name, groups[name]));
     };
     marker("pinned-header");
     projected.push(...groups.pinned);
@@ -212,7 +219,7 @@ export function createSidebarSortingStrategy(input: {
         : item.kind === "marker" && item.marker.endsWith("placeholder")
           ? slimHeight
           : moved
-            ? fallback
+            ? (sectionHeights.get(item.section) ?? fallback)
             : (rect?.height ?? fallback);
     });
     const firstShelf = items.findIndex(isShelfHeader);
