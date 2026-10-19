@@ -124,6 +124,15 @@ device keeps its own choice.
 While this is on, the active list is ordered by when each thread last came back to you, so you
 cannot drag or move threads within it. Your saved order returns when you turn it off.
 
+### Group threads by project
+
+Turn on **Settings → General → Group threads by project** on web and desktop to list active,
+working, snoozed, and settled threads under a header for each project. Repositories combined by
+**Project grouping** share one header. A project's place follows its highest thread, so dragging a
+thread above another project's group moves its whole project up. Pinned threads keep your order,
+and the headers hide while the sidebar is filtered to one project. Reordering while grouped saves
+the grouped order, so it stays when you turn grouping off.
+
 ## Settle finished work
 
 Choose **Settle thread** from its menu to move finished work out of the active list

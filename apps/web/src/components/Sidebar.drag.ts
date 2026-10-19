@@ -8,6 +8,7 @@ import {
   type SidebarListMarker,
   type SidebarSection,
 } from "./Sidebar.logic";
+import { createProjectGroupExpander } from "./sidebar/sidebarProjectGroups";
 
 const stationary = { x: 0, y: 0, scaleX: 1, scaleY: 1 };
 const hidden = { ...stationary, scaleY: 0 };
@@ -103,9 +104,13 @@ export function createSidebarSortingStrategy(input: {
   cardHeight?: number;
   slimHeight?: number;
   boundaryLabelHeight?: number;
+  groupByProject?: boolean;
 }): SortingStrategy {
   if (input.enabled === false) return () => stationary;
   const { items } = input;
+  const expandGroups = input.groupByProject ? createProjectGroupExpander(items) : null;
+  const expand = (name: SidebarSection, list: readonly ThreadItem[]) =>
+    expandGroups?.(name, list) ?? list;
   const indices = new Map(items.map((item, index) => [sidebarListItemId(item), index]));
   let previous: Pick<Layout, "rects" | "activeIndex" | "overIndex"> | undefined;
   let transforms: ReturnType<SortingStrategy>[] | null = [];
@@ -171,7 +176,7 @@ export function createSidebarSortingStrategy(input: {
     const projected: SidebarListItem[] = [];
     const marker = (name: SidebarListMarker) => projected.push({ kind: "marker", marker: name });
     const section = (name: "active" | "settled") => {
-      if (groups[name].length > 0) projected.push(...groups[name]);
+      if (groups[name].length > 0) projected.push(...expand(name, groups[name]));
       else marker(`${name}-placeholder`);
     };
     marker("pinned-header");
@@ -180,7 +185,7 @@ export function createSidebarSortingStrategy(input: {
     section("active");
     if (items.some((item) => item.kind === "marker" && item.marker === "working-header")) {
       marker("working-header");
-      projected.push(...groups.working);
+      projected.push(...expand("working", groups.working));
     }
     if (
       groups.snoozed.length > 0 ||
@@ -188,7 +193,7 @@ export function createSidebarSortingStrategy(input: {
         items.some((item) => item.kind === "marker" && item.marker === "snoozed-header"))
     ) {
       marker("snoozed-header");
-      projected.push(...groups.snoozed);
+      projected.push(...expand("snoozed", groups.snoozed));
     }
     marker("settled-header");
     section("settled");

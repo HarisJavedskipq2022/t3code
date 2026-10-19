@@ -570,6 +570,10 @@ export function useSettingsRestore(onRestored?: () => void) {
     ...(settings.sidebarWorkingShelfEnabled !== DEFAULT_UNIFIED_SETTINGS.sidebarWorkingShelfEnabled
       ? ["Working section"]
       : []),
+    ...(settings.sidebarGroupByProjectEnabled !==
+    DEFAULT_UNIFIED_SETTINGS.sidebarGroupByProjectEnabled
+      ? ["Group threads by project"]
+      : []),
     ...(settings.sidebarAutoSettleAfterDays !== DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleAfterDays
       ? ["Auto-settle inactive threads"]
       : []),
@@ -738,6 +742,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       sidebarProjectGroupingMode: DEFAULT_UNIFIED_SETTINGS.sidebarProjectGroupingMode,
       sidebarProjectSortOrder: DEFAULT_UNIFIED_SETTINGS.sidebarProjectSortOrder,
       sidebarWorkingShelfEnabled: DEFAULT_UNIFIED_SETTINGS.sidebarWorkingShelfEnabled,
+      sidebarGroupByProjectEnabled: DEFAULT_UNIFIED_SETTINGS.sidebarGroupByProjectEnabled,
       sidebarAutoSettleAfterDays: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleAfterDays,
       sidebarAutoSettleKeepPullRequests: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleKeepPullRequests,
       sidebarAutoSettleOnMerge: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleOnMerge,
@@ -2267,6 +2272,34 @@ export function GeneralSettingsPanel() {
                 updateSettings({ sidebarWorkingShelfEnabled: Boolean(checked) })
               }
               aria-label="Working section (beta)"
+            />
+          }
+        />
+
+        <SettingsRow
+          {...searchableSetting("group-threads-by-project")}
+          description="Group sidebar threads under a header for each project. Pinned threads keep your order."
+          resetAction={
+            settings.sidebarGroupByProjectEnabled !==
+            DEFAULT_UNIFIED_SETTINGS.sidebarGroupByProjectEnabled ? (
+              <SettingResetButton
+                label="thread grouping"
+                onClick={() =>
+                  updateSettings({
+                    sidebarGroupByProjectEnabled:
+                      DEFAULT_UNIFIED_SETTINGS.sidebarGroupByProjectEnabled,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.sidebarGroupByProjectEnabled}
+              onCheckedChange={(checked) =>
+                updateSettings({ sidebarGroupByProjectEnabled: Boolean(checked) })
+              }
+              aria-label="Group threads by project"
             />
           }
         />

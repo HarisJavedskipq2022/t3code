@@ -277,6 +277,15 @@ import {
 } from "./ui/combobox";
 import { SidebarContent, SidebarGroup, useSidebar } from "./ui/sidebar";
 import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
+import {
+  groupThreadsByProject,
+  insertProjectGroupHeaders,
+  parseProjectGroupMarker,
+  regroupActiveDrop,
+  resolveThreadProjectGroup,
+  SidebarProjectGroupLabel,
+  useSidebarProjectGroupKeys,
+} from "./sidebar/sidebarProjectGroups";
 import { SidebarHeaderIconButton, SidebarThreadHeader } from "./sidebar/SidebarThreadHeader";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuShortcut, MenuTrigger } from "./ui/menu";
 import { Tooltip, TooltipPopup, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
@@ -447,9 +456,16 @@ function useSidebarThreads(input: {
   readonly serverConfigs: ReadonlyMap<EnvironmentId, EnvironmentServerConfig>;
   readonly optimisticDrop: SidebarOptimisticDrop | null;
   readonly routeThreadKey: string | null;
+  readonly projectGroupKeys: ReadonlyMap<string, string> | null;
 }) {
-  const { projectScopeKey, scopedProjectKeys, serverConfigs, optimisticDrop, routeThreadKey } =
-    input;
+  const {
+    projectScopeKey,
+    scopedProjectKeys,
+    serverConfigs,
+    optimisticDrop,
+    routeThreadKey,
+    projectGroupKeys,
+  } = input;
   const threads = useThreadShells();
   const workingShelfEnabled = useClientSettings((s) => s.sidebarWorkingShelfEnabled);
   const nowMinute = useNowMinute();
@@ -498,8 +514,10 @@ function useSidebarThreads(input: {
   const partitionNextWakeAt = partition.snoozedThreads[0]?.snoozedUntil ?? null;
   if (partitionNextWakeAt !== nextSnoozeWakeAt) setNextSnoozeWakeAt(partitionNextWakeAt);
 
-  const { pinnedThreads, activeThreads, workingThreads, snoozedThreads, settledThreads } =
-    partition;
+  const { pinnedThreads, settledThreads } = partition;
+  const activeThreads = groupThreadsByProject(partition.activeThreads, projectGroupKeys);
+  const workingThreads = groupThreadsByProject(partition.workingThreads, projectGroupKeys);
+  const snoozedThreads = groupThreadsByProject(partition.snoozedThreads, projectGroupKeys);
   const visibleSettledThreads = (() => {
     if (settledThreads.length <= settledVisibleCount) return settledThreads;
     const visible = settledThreads.slice(0, settledVisibleCount);
@@ -511,9 +529,12 @@ function useSidebarThreads(input: {
     }
     return visible;
   })();
-  const renderedSettledThreads = settledShelfExpanded
-    ? visibleSettledThreads
-    : routeThreadOnly(visibleSettledThreads, routeThreadKey);
+  const renderedSettledThreads = groupThreadsByProject(
+    settledShelfExpanded
+      ? visibleSettledThreads
+      : routeThreadOnly(visibleSettledThreads, routeThreadKey),
+    projectGroupKeys,
+  );
   const visibleSnoozedThreads = snoozedShelfExpanded
     ? snoozedThreads
     : routeThreadOnly(snoozedThreads, routeThreadKey);
@@ -539,6 +560,9 @@ function useSidebarThreads(input: {
   }
   return {
     ...partition,
+    activeThreads,
+    workingThreads,
+    snoozedThreads,
     threads,
     workingShelfEnabled,
     searchableThreads: [
@@ -2965,6 +2989,7 @@ export default function Sidebar() {
     },
   );
 
+  const projectGroupKeys = useSidebarProjectGroupKeys(projectGroups, scopedProjectKeys !== null);
   const {
     threads,
     workingShelfEnabled,
@@ -3004,6 +3029,7 @@ export default function Sidebar() {
     serverConfigs,
     optimisticDrop,
     routeThreadKey,
+    projectGroupKeys,
   });
 
   const isSearchingThreads = threadSearchQuery.trim().length > 0;
@@ -3528,11 +3554,19 @@ export default function Sidebar() {
     const rowsOf = (
       list: readonly EnvironmentThreadShell[],
       section: SidebarSection,
-    ): SidebarListItem[] =>
-      list.map((thread) => {
-        const key = scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
-        return { kind: "thread", key, section };
-      });
+    ): SidebarListItem[] => {
+      const rows = list.map((thread) => ({
+        kind: "thread" as const,
+        key: scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
+        section,
+        ...(projectGroupKeys && {
+          projectGroup: resolveThreadProjectGroup(thread, projectGroupKeys),
+        }),
+      }));
+      return projectGroupKeys === null
+        ? rows
+        : insertProjectGroupHeaders(section, rows, (row) => row.projectGroup);
+    };
     if (
       pinnedThreads.length +
         activeThreads.length +
@@ -3638,6 +3672,7 @@ export default function Sidebar() {
     settledVisibleCount,
     routeThreadKey,
     snoozedThreadCount: snoozedThreads.length,
+    groupByProject: projectGroupKeys !== null,
   });
   const draggedThreadKey = dragState?.activeKey;
   const draggedFromSection = dragState?.activeSection;
@@ -3649,8 +3684,15 @@ export default function Sidebar() {
     if (source === undefined) return createSidebarCollisionDetection(() => false);
     return createSidebarCollisionDetection(
       (id) => {
-        const target = resolveSidebarDropTarget(sidebarListItems, draggedThreadKey, id);
-        if (target === null) return false;
+        const resolved = resolveSidebarDropTarget(sidebarListItems, draggedThreadKey, id);
+        if (resolved === null) return false;
+        const { target, activeKeysById: plannedActiveKeysById } = regroupActiveDrop({
+          enabled: projectGroupKeys !== null,
+          target: resolved,
+          activeKey: draggedThreadKey,
+          activeKeysById,
+          items: sidebarListItems,
+        });
         return (
           planSidebarThreadDrop({
             activeKey: draggedThreadKey,
@@ -3665,7 +3707,7 @@ export default function Sidebar() {
             pinnedKeysById,
             reorderableKeys: draggableThreadKeys,
             activeOrder: activeKeys,
-            activeKeysById,
+            activeKeysById: plannedActiveKeysById,
             activeReorderableKeys: activeReorderableThreadKeys,
             activeTimeOrdered: workingShelfEnabled,
           }).kind !== "none"
@@ -3680,12 +3722,19 @@ export default function Sidebar() {
   const handleThreadDragEnd = (event: DragEndEvent) => {
     const activeKey = String(event.active.id);
     const activeSection = sectionByThreadKey.get(activeKey);
-    const target =
+    const resolved =
       event.over === null
         ? null
         : resolveSidebarDropTarget(sidebarListItems, activeKey, String(event.over.id));
     const activeThread = threadByKey.get(activeKey);
-    if (activeSection === undefined || target === null || activeThread === undefined) return;
+    if (activeSection === undefined || resolved === null || activeThread === undefined) return;
+    const { target, activeKeysById: plannedActiveKeysById } = regroupActiveDrop({
+      enabled: projectGroupKeys !== null,
+      target: resolved,
+      activeKey,
+      activeKeysById,
+      items: sidebarListItems,
+    });
     const threadRef = scopeThreadRef(activeThread.environmentId, activeThread.id);
     const plan = planSidebarThreadDrop({
       activeKey,
@@ -3700,7 +3749,7 @@ export default function Sidebar() {
       pinnedKeysById,
       reorderableKeys: draggableThreadKeys,
       activeOrder: activeKeys,
-      activeKeysById,
+      activeKeysById: plannedActiveKeysById,
       activeReorderableKeys: activeReorderableThreadKeys,
       activeTimeOrdered: workingShelfEnabled,
     });
@@ -5028,6 +5077,21 @@ export default function Sidebar() {
                               />,
                             );
                             break;
+                          default: {
+                            const groupKey = parseProjectGroupMarker(item.marker);
+                            if (groupKey === null) break;
+                            items.push(
+                              <SortableSidebarMarker
+                                key={item.marker}
+                                marker={item.marker}
+                                className="mx-0.5"
+                              >
+                                <SidebarProjectGroupLabel
+                                  project={projectGroupByScopeKey.get(groupKey) ?? null}
+                                />
+                              </SortableSidebarMarker>,
+                            );
+                          }
                         }
                       }
                       return items;
