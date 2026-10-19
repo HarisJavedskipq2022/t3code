@@ -10,12 +10,18 @@ import {
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { Schema } from "effect";
 import { ChevronDownIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
+import { refreshUsageLimits } from "@t3tools/client-runtime/state/usage";
+import type { EnvironmentId } from "@t3tools/contracts";
 
 import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { useClientSettings } from "../../hooks/useSettings";
 import { cn } from "../../lib/utils";
 import { environmentPresentations } from "../../state/presentation";
+import { serverEnvironment } from "../../state/server";
+import { useAtomCommand } from "../../state/use-atom-command";
+import { RefreshIcon } from "../ui/refresh-icon";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
 import { providerClients } from "../settings/providerDriverMeta";
 import { PreviewCard, PreviewCardPopup, PreviewCardTrigger } from "../ui/preview-card";
@@ -47,6 +53,52 @@ function useMinuteClock() {
     return () => clearInterval(interval);
   }, []);
   return now;
+}
+
+/**
+ * Servers re-check limits only when a client asks, so the strip asks while it is
+ * on screen: when it appears, when the window comes back, and on a timer. The
+ * shared throttle in `refreshUsageLimits` holds each environment to one automatic
+ * check per five minutes across the strip and the Usage page.
+ */
+const AUTO_REFRESH_TICK_MS = 60_000;
+
+function useUsageLimitsRefresh(environmentIds: ReadonlyArray<EnvironmentId>, active: boolean) {
+  const refreshProviders = useAtomCommand(serverEnvironment.refreshProviders, {
+    reportFailure: false,
+  });
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshAll = (automatic: boolean) =>
+    Promise.all(
+      environmentIds.map((environmentId) =>
+        refreshUsageLimits(
+          environmentId,
+          () => refreshProviders({ environmentId, input: {} }),
+          automatic,
+        ).catch(() => undefined),
+      ),
+    );
+  const refreshAutomatically = useEffectEvent(() => {
+    if (document.visibilityState === "visible") void refreshAll(true);
+  });
+  useEffect(() => {
+    if (!active) return;
+    refreshAutomatically();
+    const interval = setInterval(refreshAutomatically, AUTO_REFRESH_TICK_MS);
+    window.addEventListener("focus", refreshAutomatically);
+    document.addEventListener("visibilitychange", refreshAutomatically);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", refreshAutomatically);
+      document.removeEventListener("visibilitychange", refreshAutomatically);
+    };
+  }, [active]);
+  const refreshNow = () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    void refreshAll(false).finally(() => setRefreshing(false));
+  };
+  return { refreshing, refreshNow };
 }
 
 function providerLabel(driver: LimitPool["driver"]) {
@@ -174,10 +226,7 @@ function UsageStripRow({
   );
 }
 
-/**
- * Subscription limits at a glance. It reads the snapshots environments already
- * publish and never probes a provider itself, so it costs no extra requests.
- */
+/** Subscription limits at a glance, from the snapshots environments publish. */
 export function SidebarUsageStrip() {
   const enabled = useClientSettings((settings) => settings.sidebarUsageStripEnabled);
   const onUsagePage = useLocation({ select: (location) => location.pathname === "/usage" });
@@ -186,11 +235,17 @@ export function SidebarUsageStrip() {
   const { isMobile, setOpenMobile } = useSidebar();
   const navigate = useNavigate();
   const now = useMinuteClock();
-
-  if (!enabled || onUsagePage) return null;
   const entries = usageStripEntries(collectLimitPools(collectLimitAccounts(presentations), now));
   const tightest = tightestUsageStripEntry(entries);
-  if (tightest === null) return null;
+  const shown = enabled && !onUsagePage && tightest !== null;
+  const connectedEnvironmentIds = [...presentations].flatMap(([environmentId, presentation]) =>
+    presentation.connection.phase === "connected" && presentation.serverConfig !== null
+      ? [environmentId]
+      : [],
+  );
+  const { refreshing, refreshNow } = useUsageLimitsRefresh(connectedEnvironmentIds, shown);
+
+  if (!shown) return null;
 
   const openLimits = () => {
     if (isMobile) setOpenMobile(false);
@@ -200,18 +255,37 @@ export function SidebarUsageStrip() {
 
   return (
     <section aria-label="Usage limits" className="flex flex-col gap-0.5 px-1 pb-1">
-      <button
-        type="button"
-        aria-expanded={!collapsed}
-        onClick={() => setCollapsed(!collapsed)}
-        className="flex h-5 items-center justify-between rounded-md px-1.5 text-2xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-      >
-        <span>Limits left</span>
-        <ChevronDownIcon
-          aria-hidden
-          className={cn("size-3 transition-transform", collapsed && "-rotate-90")}
-        />
-      </button>
+      <div className="flex h-5 items-center gap-1">
+        <button
+          type="button"
+          aria-expanded={!collapsed}
+          onClick={() => setCollapsed(!collapsed)}
+          className="flex h-5 min-w-0 flex-1 items-center justify-between rounded-md px-1.5 text-2xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+        >
+          <span>Limits left</span>
+          <ChevronDownIcon
+            aria-hidden
+            className={cn("size-3 transition-transform", collapsed && "-rotate-90")}
+          />
+        </button>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <button
+                type="button"
+                aria-label="Refresh limits"
+                aria-busy={refreshing}
+                disabled={refreshing}
+                onClick={refreshNow}
+                className="flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+              />
+            }
+          >
+            <RefreshIcon size="xs" refreshing={refreshing} />
+          </TooltipTrigger>
+          <TooltipPopup side="top">Refresh limits</TooltipPopup>
+        </Tooltip>
+      </div>
       {(collapsed ? [tightest] : entries).map((entry) => (
         <UsageStripRow key={entry.pool.driver} entry={entry} now={now} onOpen={openLimits} />
       ))}

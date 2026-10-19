@@ -103,8 +103,9 @@ On web and desktop, the bottom of the sidebar shows how much is left for each pr
 whichever of its windows is closest to running out, with the time until that window resets. Hover
 a provider for all of its windows, or click it to open **Usage → Limits**. Click **Limits left** to
 fold the list to the one provider closest to its limit. Turn it off with **Settings → General →
-Usage limits in sidebar**. Like Limits, it shows the last reading and refreshes as your agents
-report usage.
+Usage limits in sidebar**. While it is on screen it re-checks limits when the
+window comes back into focus and at most every five minutes, and updates sooner as your
+agents report usage. Press its refresh button to check right away.
 
 Pick `/usage-limits` from the composer's command menu, or send it as a message, to check the
 current model's limits without leaving the conversation. The result opens above the composer and
