@@ -1,4 +1,5 @@
 import type { DraftId } from "~/composerDraftStore";
+import { DraftStartFromTicketLink } from "../jira/jiraEntryPoints";
 import { composerDraftHasUserContent, useComposerDraftStore } from "~/composerDraftStore";
 import { resolveEnvironmentMachineKind, type ScopedProjectRef } from "@t3tools/contracts";
 import { scopedProjectKey, scopeProjectRef } from "@t3tools/client-runtime/environment";
@@ -362,9 +363,10 @@ export function DraftHeroHeadline({
         )}
       </h1>
       {}
-      {scratchWorkspaceRoot === null ? null : (
-        <p className="mt-2 flex h-6 items-center text-sm">
+      {scratchWorkspaceRoot === null && !hasResolvedProject ? null : (
+        <p className="mt-2 flex h-6 items-center gap-3 text-sm">
           {isScratchDraft ? projectSelector : orStartWithoutProject}
+          {isScratchDraft ? null : <DraftStartFromTicketLink projectRef={activeProjectRef} />}
         </p>
       )}
     </div>

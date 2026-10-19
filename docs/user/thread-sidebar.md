@@ -35,7 +35,8 @@ directory itself sits inside a Git checkout.
 
 On web and desktop, connect Jira Cloud in **Settings → Integrations → Jira** with your site,
 email, and an API token from id.atlassian.com. The token stays on the environment's server.
-Then choose **Start from Jira ticket…** in the command palette. It lists the open tickets
+Then click the ticket button next to **New thread** in the sidebar, **or start from a Jira
+ticket** under a new thread's heading, or **Start from Jira ticket…** in the command palette. It lists the open tickets
 assigned to you; type a key such as `SHP-4158` or words to search. Pick a project and press
 **Open draft**: you get a new worktree draft on a branch named after the ticket (`fix/` for
 bugs, `feat/` otherwise) with the ticket's description and attachment links as the message.

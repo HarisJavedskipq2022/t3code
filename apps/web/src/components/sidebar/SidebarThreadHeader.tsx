@@ -1,4 +1,5 @@
 import { FolderPlusIcon, SearchIcon, SquarePenIcon, XIcon } from "lucide-react";
+import { SidebarStartFromTicketButton } from "../jira/jiraEntryPoints";
 import {
   type ComponentProps,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -112,6 +113,7 @@ export function SidebarThreadHeader({
             </SidebarHeaderIconButton>
           </>
         ) : null}
+        <SidebarStartFromTicketButton />
         <SidebarHeaderIconButton
           label="New thread"
           tooltip={
