@@ -183,6 +183,7 @@ export type ProjectionSettlementCandidate = Pick<
   | "pullRequests"
   | "linkedPullRequest"
   | "branchPullRequest"
+  | "linkedTicket"
   | "createdAt"
   | "updatedAt"
   | "archivedAt"
@@ -1512,6 +1513,9 @@ export function threadShellFromProjection(
     ...(projection.thread.branchPullRequest === undefined
       ? {}
       : { branchPullRequest: projection.thread.branchPullRequest }),
+    ...(projection.thread.linkedTicket === undefined
+      ? {}
+      : { linkedTicket: projection.thread.linkedTicket }),
     ...(projection.thread.activeOrderKey === undefined
       ? {}
       : { activeOrderKey: projection.thread.activeOrderKey }),
@@ -1770,6 +1774,9 @@ function shellFromState(input: {
     ...(input.state.thread.branchPullRequest === undefined
       ? {}
       : { branchPullRequest: input.state.thread.branchPullRequest }),
+    ...(input.state.thread.linkedTicket === undefined
+      ? {}
+      : { linkedTicket: input.state.thread.linkedTicket }),
     ...(input.state.thread.activeOrderKey === undefined
       ? {}
       : { activeOrderKey: input.state.thread.activeOrderKey }),

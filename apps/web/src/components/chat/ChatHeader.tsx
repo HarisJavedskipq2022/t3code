@@ -3,6 +3,7 @@ import {
   type EnvironmentId,
   type ThreadId,
 } from "@t3tools/contracts";
+import { HeaderTicketChip } from "../jira/ThreadTicketChip";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import {
@@ -398,6 +399,7 @@ export const ChatHeader = memo(function ChatHeader({
           )}
         </WorkspaceBreadcrumbItem>
       </WorkspaceBreadcrumb>
+      {isServerThread ? <HeaderTicketChip threadRef={activeThreadRef} /> : null}
     </div>
   );
 });

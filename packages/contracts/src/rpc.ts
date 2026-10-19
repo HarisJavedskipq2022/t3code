@@ -339,6 +339,17 @@ import {
 } from "./providerUsageLimits.ts";
 import { UsagePricing, UsageReadError, UsageSummary, UsageSummaryInput } from "./usage.ts";
 import {
+  JiraConnectionResult,
+  JiraError,
+  JiraIssueDetail,
+  JiraIssueInput,
+  JiraIssueSummary,
+  JiraSearchIssuesInput,
+  JiraSearchIssuesResult,
+  JiraTransitionIssueInput,
+  JiraTransitionsResult,
+} from "./jira.ts";
+import {
   StorageCleanupReport,
   DatabaseStorageStatus,
   ServerSettings,
@@ -416,6 +427,11 @@ export const WS_METHODS = {
   providerUploadFeedback: "provider.uploadFeedback",
   providerAuthStart: "provider.auth.start",
   providerConsumeResetCredit: "provider.consumeResetCredit",
+  jiraSearchIssues: "jira.searchIssues",
+  jiraGetIssue: "jira.getIssue",
+  jiraListTransitions: "jira.listTransitions",
+  jiraTransitionIssue: "jira.transitionIssue",
+  jiraTestConnection: "jira.testConnection",
   providerAuthComplete: "provider.auth.complete",
   chatGptReconnectProfile: "provider.chatgpt.reconnect-profile",
   chatGptImportProfile: "provider.chatgpt.import-profile",
@@ -641,6 +657,38 @@ const WsProviderConsumeResetCreditRpc = Rpc.make(WS_METHODS.providerConsumeReset
   payload: ProviderConsumeResetCreditInput,
   success: ProviderConsumeResetCreditResult,
   error: Schema.Union([ProviderSetupError, UsageLimitSourceError, EnvironmentAuthorizationError]),
+});
+
+const JiraRpcError = Schema.Union([JiraError, EnvironmentAuthorizationError]);
+
+const WsJiraSearchIssuesRpc = Rpc.make(WS_METHODS.jiraSearchIssues, {
+  payload: JiraSearchIssuesInput,
+  success: JiraSearchIssuesResult,
+  error: JiraRpcError,
+});
+
+const WsJiraGetIssueRpc = Rpc.make(WS_METHODS.jiraGetIssue, {
+  payload: JiraIssueInput,
+  success: JiraIssueDetail,
+  error: JiraRpcError,
+});
+
+const WsJiraListTransitionsRpc = Rpc.make(WS_METHODS.jiraListTransitions, {
+  payload: JiraIssueInput,
+  success: JiraTransitionsResult,
+  error: JiraRpcError,
+});
+
+const WsJiraTransitionIssueRpc = Rpc.make(WS_METHODS.jiraTransitionIssue, {
+  payload: JiraTransitionIssueInput,
+  success: JiraIssueSummary,
+  error: JiraRpcError,
+});
+
+const WsJiraTestConnectionRpc = Rpc.make(WS_METHODS.jiraTestConnection, {
+  payload: Schema.Struct({}),
+  success: JiraConnectionResult,
+  error: JiraRpcError,
 });
 
 const WsProviderAuthStartRpc = Rpc.make(WS_METHODS.providerAuthStart, {
@@ -1906,7 +1954,7 @@ export class RpcScopeAuthorization extends RpcMiddleware.Service<RpcScopeAuthori
   { error: EnvironmentAuthorizationError },
 ) {}
 
-export const WsRpcGroup = RpcGroup.make(
+export const WsCoreRpcGroup = RpcGroup.make(
   WsVetWatchRpc,
   WsVetRunRpc,
   WsVetCancelRpc,
@@ -2109,3 +2157,18 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationV2SubscribeThreadRpc,
   WsOrchestrationV2SubscribeCommandOutputRpc,
 ).middleware(RpcScopeAuthorization);
+
+/**
+ * Fork RPCs get a group of their own so the server builds their handlers in a
+ * separate layer: one more handler in the core group's map tips its layer type
+ * past what the checker resolves, and the requirements collapse to `any`.
+ */
+export const JiraRpcGroup = RpcGroup.make(
+  WsJiraSearchIssuesRpc,
+  WsJiraGetIssueRpc,
+  WsJiraListTransitionsRpc,
+  WsJiraTransitionIssueRpc,
+  WsJiraTestConnectionRpc,
+).middleware(RpcScopeAuthorization);
+
+export const WsRpcGroup = WsCoreRpcGroup.merge(JiraRpcGroup);

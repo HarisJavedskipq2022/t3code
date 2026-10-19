@@ -112,6 +112,7 @@ import {
 import { searchableSetting } from "./settingsSearch";
 import { ProjectDefaultsSettings } from "./ProjectDefaultsSettings";
 import { useSettingsScope } from "./SettingsScopeContext";
+import { JiraSettingsSection } from "../jira/JiraSettingsSection";
 import { BrowserImportWizard, type WizardTarget } from "./BrowserImportWizard";
 import type { ImportOutcome } from "./browserImportWizard.logic";
 
@@ -1500,6 +1501,7 @@ export function IntegrationsSettingsPanel() {
         <PullRequestLinksOpenInAppSetting />
       </SettingsSection>
       <DeviceIntegrationSettings />
+      <JiraSettingsSection />
     </SettingsPageContainer>
   );
 }

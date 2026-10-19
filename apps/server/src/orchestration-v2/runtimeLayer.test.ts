@@ -5853,3 +5853,78 @@ it.layer(layerQueueResumeDisabledInstanceTest)(
     );
   },
 );
+
+it.layer(Layer.fresh(layerSharedApplicationDataPlaneTest))("ticket pull request updates", (it) => {
+  it.effect("queues one ticket update when the PR opens and one when it merges", () =>
+    Effect.gen(function* () {
+      const orchestrator = yield* Orchestrator.OrchestratorV2;
+      const sql = yield* SqlClient.SqlClient;
+      const threadId = ThreadId.make("ticket-pr");
+      yield* orchestrator.dispatch({
+        type: "thread.create",
+        createdBy: "user",
+        creationSource: "web",
+        commandId: CommandId.make("ticket-pr-create"),
+        threadId,
+        projectId: ProjectId.make("ticket-pr-project"),
+        title: "Print card stuck",
+        modelSelection,
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        branch: "fix/shp-4158-print-card-stuck",
+        worktreePath: null,
+        linkedTicket: {
+          provider: "jira",
+          key: "SHP-4158",
+          url: "https://team.atlassian.net/browse/SHP-4158",
+        },
+      });
+      assert.equal((yield* orchestrator.getThreadShell(threadId))?.linkedTicket?.key, "SHP-4158");
+      const key = { host: "github.com", repository: "acme/app", number: 7 };
+      const url = "https://github.com/acme/app/pull/7";
+      yield* orchestrator.dispatch({
+        type: "thread.pull-request.link",
+        commandId: CommandId.make("ticket-pr-link"),
+        threadId,
+        ...key,
+        url,
+        source: "created",
+      });
+      const snapshot = (state: "open" | "merged", syncedAt: string) => ({
+        state,
+        title: "Fix print card",
+        headBranch: "fix/shp-4158-print-card-stuck",
+        baseBranch: "main",
+        isDraft: false,
+        updatedAt: null,
+        syncedAt,
+      });
+      for (const [commandId, state, syncedAt] of [
+        ["ticket-pr-open", "open", "2026-10-19T12:00:00.000Z"],
+        ["ticket-pr-merged", "merged", "2026-10-19T13:00:00.000Z"],
+        ["ticket-pr-merged-again", "merged", "2026-10-19T14:00:00.000Z"],
+      ] as const) {
+        yield* orchestrator.dispatch({
+          type: "thread.pull-request-link.sync",
+          commandId: CommandId.make(commandId),
+          threadId,
+          ...key,
+          snapshot: snapshot(state, syncedAt),
+          stack: null,
+        });
+      }
+      const rows = yield* sql<{ effect_id: string; payload_json: string }>`
+        SELECT effect_id, payload_json FROM orchestration_v2_effect_outbox
+        WHERE effect_type = ${"jira.pull-request-stage"}
+        ORDER BY effect_id
+      `;
+      assert.deepEqual(
+        rows.map((row) => [row.effect_id, JSON.parse(row.payload_json).stage]),
+        [
+          [`effect:jira:ticket-pr:merged:${url}`, "merged"],
+          [`effect:jira:ticket-pr:opened:${url}`, "opened"],
+        ],
+      );
+    }),
+  );
+});

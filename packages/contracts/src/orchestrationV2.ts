@@ -1,3 +1,4 @@
+import { ThreadLinkedTicket } from "./jira.ts";
 import { OrchestrationMessageContext } from "./composerContext.ts";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -378,6 +379,7 @@ export const OrchestrationV2AppThread = Schema.Struct({
   linkedPullRequest: Schema.optional(Schema.NullOr(ThreadLinkedPullRequest)),
   pullRequests: Schema.optional(Schema.Array(ThreadPullRequestLink)),
   branchPullRequest: Schema.optional(Schema.NullOr(ThreadLinkedPullRequest)),
+  linkedTicket: Schema.optional(Schema.NullOr(ThreadLinkedTicket)),
   activeProviderThreadId: Schema.NullOr(ProviderThreadId),
   historyOrigin: Schema.optional(OrchestrationV2ThreadHistoryOrigin),
   lineage: OrchestrationV2AppThreadLineage,
@@ -1817,6 +1819,7 @@ export const OrchestrationV2ThreadShell = Schema.Struct({
   linkedPullRequest: Schema.optional(Schema.NullOr(ThreadLinkedPullRequest)),
   pullRequests: Schema.optional(Schema.Array(ThreadPullRequestLink)),
   branchPullRequest: Schema.optional(Schema.NullOr(ThreadLinkedPullRequest)),
+  linkedTicket: Schema.optional(Schema.NullOr(ThreadLinkedTicket)),
   lineage: OrchestrationV2AppThreadLineage,
   forkedFrom: Schema.NullOr(OrchestrationV2AppThread.fields.forkedFrom),
   activeProviderThreadId: Schema.NullOr(ProviderThreadId),
@@ -2571,6 +2574,7 @@ export const OrchestrationV2Command = Schema.Union([
     interactionMode: ProviderInteractionMode,
     branch: Schema.NullOr(TrimmedNonEmptyString),
     worktreePath: Schema.NullOr(TrimmedNonEmptyString),
+    linkedTicket: Schema.optional(ThreadLinkedTicket),
     importedNativeThread: Schema.optional(
       Schema.Struct({
         ref: Schema.Struct({
@@ -2688,6 +2692,8 @@ export const OrchestrationV2Command = Schema.Union([
     limitRecovery: Schema.optional(Schema.NullOr(OrchestrationV2LimitRecoveryUpdate)),
     /** Link (object) or unlink (null) a pull request (#8160); absent leaves it unchanged. */
     linkedPullRequest: Schema.optional(Schema.NullOr(ThreadLinkedPullRequest)),
+    /** Link (object) or unlink (null) the ticket the thread works on. */
+    linkedTicket: Schema.optional(Schema.NullOr(ThreadLinkedTicket)),
   }),
   Schema.Struct({
     type: Schema.Literal("thread.pull-request.link"),
@@ -3158,6 +3164,7 @@ export const OrchestrationV2ThreadLaunchInput = Schema.Struct({
   interactionMode: ProviderInteractionMode,
   fusion: Schema.optional(Schema.NullOr(OrchestrationV2ThreadFusion)),
   workspaceStrategy: OrchestrationV2ThreadLaunchWorkspaceStrategy,
+  linkedTicket: Schema.optional(ThreadLinkedTicket),
   initialMessage: Schema.optional(
     Schema.Struct({
       messageId: Schema.optional(MessageId),

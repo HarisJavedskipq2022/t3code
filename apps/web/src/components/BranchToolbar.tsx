@@ -1,4 +1,5 @@
 import { writeTextToClipboard } from "../hooks/useCopyToClipboard";
+import { BranchToolbarTicket } from "./jira/ThreadTicketChip";
 import { readLocalApi } from "../localApi";
 import { stackedThreadToast, toastManager } from "./ui/toast";
 import { ComposerContextLabel } from "./ComposerContextLabel";
@@ -807,6 +808,9 @@ export const BranchToolbar = memo(function BranchToolbar({
           {...(onCheckoutPullRequestRequest ? { onCheckoutPullRequestRequest } : {})}
           {...(onComposerFocusRequest ? { onComposerFocusRequest } : {})}
         />
+      ) : null}
+      {showGitControls ? (
+        <BranchToolbarTicket environmentId={environmentId} threadId={threadId} />
       ) : null}
     </ComposerSurface.ContextStrip>
   );

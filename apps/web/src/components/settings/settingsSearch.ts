@@ -647,6 +647,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     ],
   },
   {
+    id: "jira",
+    title: "Jira",
+    to: "/settings/integrations",
+    searchTerms: ["atlassian ticket issue api token site status transition pull request comment"],
+  },
+  {
     id: "usage-providers",
     title: "Usage providers",
     to: "/settings/providers",

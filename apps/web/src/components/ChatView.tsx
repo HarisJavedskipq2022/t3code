@@ -1,4 +1,6 @@
 import { ThreadFind, ThreadFindCanvas, type ThreadFindControls } from "./chat/ThreadFindProvider";
+import { withTicketBootstrap } from "./jira/ticketDraft.logic";
+import { clearTicketDraft, readTicketDraft } from "./jira/ticketDraftStore";
 import { fusionTurnStartField, useForkChatViewExtras } from "./chat/forkChatViewExtras";
 import { THREAD_FIND_BAR_RESERVED_HEIGHT } from "./chat/ThreadFindBar";
 import { usageLimitRecoveryBannerItem } from "./chat/UsageLimitRecoveryBanner";
@@ -6934,7 +6936,7 @@ export default function ChatView(props: ChatViewProps) {
     let backgroundDraftOpened = false;
     let turnStartSucceeded = false;
     if (failure === null && turnAttachmentsResult._tag === "Success") {
-      const bootstrap =
+      const bootstrap = withTicketBootstrap(
         isLocalDraftThread || baseBranchForWorktree
           ? {
               ...(isLocalDraftThread
@@ -6962,7 +6964,9 @@ export default function ChatView(props: ChatViewProps) {
                   }
                 : {}),
             }
-          : undefined;
+          : undefined,
+        isLocalDraftThread ? readTicketDraft(threadIdForSend) : null,
+      );
       const backgroundThreadRef =
         submissionIntent === "background" && isLocalDraftThread
           ? scopeThreadRef(environmentId, threadIdForSend)
@@ -7043,6 +7047,7 @@ export default function ChatView(props: ChatViewProps) {
         failure = startResult;
       } else {
         turnStartSucceeded = true;
+        clearTicketDraft(threadIdForSend);
         setKeepFullHistory(routeThreadKey, false);
         clearUsageLimitsFor(routeThreadKey);
         if (turnUsesAttachmentUploads) {

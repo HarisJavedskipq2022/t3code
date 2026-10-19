@@ -62,6 +62,11 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.serverUpdateProvider]: AuthProvidersManageScope,
   [WS_METHODS.providerAuthStart]: AuthProvidersManageScope,
   [WS_METHODS.providerConsumeResetCredit]: AuthProvidersManageScope,
+  // Tickets are read with the environment's Jira login, so reading one starts work like a thread.
+  [WS_METHODS.jiraSearchIssues]: AuthOrchestrationOperateScope,
+  [WS_METHODS.jiraGetIssue]: AuthOrchestrationOperateScope,
+  [WS_METHODS.jiraListTransitions]: AuthOrchestrationOperateScope,
+  [WS_METHODS.jiraTestConnection]: AuthProvidersManageScope,
   [WS_METHODS.providerAuthComplete]: AuthProvidersManageScope,
   [WS_METHODS.chatGptReconnectProfile]: AuthProvidersManageScope,
   [WS_METHODS.chatGptImportProfile]: AuthProvidersManageScope,

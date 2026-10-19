@@ -1526,6 +1526,11 @@ it.layer(NodeServices.layer)("server settings", (it) => {
               enabled: true,
             },
           },
+          jira: {
+            siteUrl: "team.atlassian.net",
+            email: "me@example.test",
+            apiToken: "jira-secret",
+          },
         });
         const values = [
           "config-secret",
@@ -1534,6 +1539,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
           "bitbucket-secret",
           "gitcafe-secret",
           "quota-secret",
+          "jira-secret",
         ];
         const client = ServerSettingsModule.redactServerSettingsForClient(saved);
         const disk = yield* fs.readFileString(config.settingsPath);
@@ -1548,6 +1554,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
           providerInstances: client.providerInstances,
           sourceControlHosts: client.sourceControlHosts,
           usageLimitSources: client.usageLimitSources,
+          jira: client.jira,
         });
         for (const value of values) assert.include(JSON.stringify(echoed), value);
         const renamed = yield* service.updateProviderInstance({

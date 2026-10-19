@@ -28,6 +28,9 @@ import * as ThreadTitleRegenerationService from "./ThreadTitleRegenerationServic
 import * as ThreadManagementService from "./ThreadManagementService.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import { continueRestartedRun } from "./RestartContinuation.ts";
+import * as JiraService from "../jira/JiraService.ts";
+import { FetchHttpClient } from "effect/http";
+import { runJiraPullRequestStage } from "../jira/jiraEffect.ts";
 
 export class OrchestrationEffectExecutionError extends Schema.TaggedError<OrchestrationEffectExecutionError>()(
   "OrchestrationEffectExecutionError",
@@ -509,6 +512,28 @@ export const layerExecutor: Layer.Layer<
                     }),
                 ),
               );
+          case "jira.pull-request-stage":
+            return runJiraPullRequestStage({
+              effectId: effect.id,
+              threadId: effect.threadId,
+              key: effect.request.key,
+              stage: effect.request.stage,
+              pullRequestUrl: effect.request.pullRequestUrl,
+              linkBranchPullRequest: effect.request.linkBranchPullRequest,
+            }).pipe(
+              // Stateless and rare, so built per ticket update rather than required by every executor.
+              Effect.provide(JiraService.layer.pipe(Layer.provide(FetchHttpClient.layer))),
+              Effect.provideService(ServerSettings.ServerSettingsService, settings),
+              Effect.provideService(ThreadManagementService.ThreadManagementService, threads),
+              Effect.mapError(
+                (cause) =>
+                  new OrchestrationEffectExecutionError({
+                    effectId: effect.id,
+                    effectType: effect.request.type,
+                    cause,
+                  }),
+              ),
+            );
           case "delegated-tasks.stop":
             return threads
               .stopDelegatedTasks({

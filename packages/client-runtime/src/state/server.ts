@@ -1150,6 +1150,30 @@ export function createServerEnvironmentAtoms<R, E>(
         key: ({ environmentId, input }) => JSON.stringify([environmentId, input]),
       },
     }),
+    jiraSearchIssues: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:jira-search-issues",
+      tag: WS_METHODS.jiraSearchIssues,
+    }),
+    jiraGetIssue: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:jira-get-issue",
+      tag: WS_METHODS.jiraGetIssue,
+    }),
+    jiraListTransitions: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:jira-list-transitions",
+      tag: WS_METHODS.jiraListTransitions,
+    }),
+    jiraTransitionIssue: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:jira-transition-issue",
+      tag: WS_METHODS.jiraTransitionIssue,
+      concurrency: {
+        mode: "singleFlight",
+        key: ({ environmentId, input }) => JSON.stringify([environmentId, input.key]),
+      },
+    }),
+    jiraTestConnection: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:jira-test-connection",
+      tag: WS_METHODS.jiraTestConnection,
+    }),
     refreshProviders: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:refresh-providers",
       tag: WS_METHODS.serverRefreshProviders,

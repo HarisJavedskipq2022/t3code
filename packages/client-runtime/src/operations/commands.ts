@@ -1,6 +1,7 @@
 import { remapComposerContextAttachments } from "@t3tools/shared/composerContextReferences";
 import {
   type ThreadLinkedPullRequest,
+  type ThreadLinkedTicket,
   CommandId,
   CheckpointId,
   CheckpointScopeId,
@@ -127,6 +128,7 @@ export interface UpdateThreadMetadataInput extends ThreadCommandInput {
   readonly worktreePath?: string | null;
   readonly regenerateTitle?: boolean;
   readonly linkedPullRequest?: ThreadLinkedPullRequest | null;
+  readonly linkedTicket?: ThreadLinkedTicket | null;
   readonly expectedEmpty?: boolean;
 }
 
@@ -148,6 +150,7 @@ interface StartThreadBootstrap {
     readonly branch: string | null;
     readonly worktreePath: string | null;
     readonly createdAt: string;
+    readonly linkedTicket?: ThreadLinkedTicket;
   };
   readonly prepareWorktree?: {
     readonly requireWorktree?: boolean;
@@ -563,6 +566,7 @@ export const updateThreadMetadata = Effect.fn("EnvironmentCommands.updateThreadM
       input.worktreePath !== undefined ||
       input.regenerateTitle !== undefined ||
       input.linkedPullRequest !== undefined ||
+      input.linkedTicket !== undefined ||
       input.limitRecovery !== undefined
     ) {
       result = yield* dispatch({
@@ -578,6 +582,7 @@ export const updateThreadMetadata = Effect.fn("EnvironmentCommands.updateThreadM
         ...(input.linkedPullRequest === undefined
           ? {}
           : { linkedPullRequest: input.linkedPullRequest }),
+        ...(input.linkedTicket === undefined ? {} : { linkedTicket: input.linkedTicket }),
       });
     }
     if (input.modelSelection !== undefined) {
@@ -675,6 +680,7 @@ export const startThreadTurn = Effect.fn("EnvironmentCommands.startThreadTurn")(
       interactionMode: input.interactionMode,
       ...(input.fusion === undefined ? {} : { fusion: input.fusion }),
       workspaceStrategy,
+      ...(bootstrap?.linkedTicket === undefined ? {} : { linkedTicket: bootstrap.linkedTicket }),
       initialMessage: {
         messageId: input.message.messageId,
         text: input.message.text,

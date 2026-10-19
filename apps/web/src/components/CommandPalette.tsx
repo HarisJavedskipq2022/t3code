@@ -1,5 +1,6 @@
 "use client";
 
+import { openStartFromTicket } from "./jira/StartFromTicketDialog";
 import { threadPullRequestLinkMode } from "@t3tools/client-runtime/thread-pull-request-compatibility";
 import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
 
@@ -75,6 +76,7 @@ import {
   RotateCcwIcon,
   SettingsIcon,
   SquarePenIcon,
+  TicketIcon,
   SunIcon,
   TextSearchIcon,
   Gavel,
@@ -1614,6 +1616,17 @@ function OpenCommandPaletteDialog(props: {
       icon: <SquarePenIcon className={ITEM_ICON_CLASS} />,
       addonIcon: <SquarePenIcon className={ADDON_ICON_CLASS} />,
       groups: [{ value: "projects", label: "Projects", items: projectThreadItems }],
+    });
+  }
+
+  if (projects.length > 0) {
+    actionItems.push({
+      kind: "action",
+      value: "action:start-from-jira-ticket",
+      searchTerms: ["jira", "ticket", "issue", "start", "new thread", "worktree"],
+      title: "Start from Jira ticket…",
+      icon: <TicketIcon className={ITEM_ICON_CLASS} />,
+      run: async () => openStartFromTicket(defaultProjectRef ?? null),
     });
   }
 

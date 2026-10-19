@@ -18,6 +18,7 @@ import {
   TrimmedNonEmptyString,
   TrimmedString,
 } from "./baseSchemas.ts";
+import { JiraSettings, JiraSettingsPatch } from "./jira.ts";
 import { UsageLimitSourceId } from "./usageLimitSourceId.ts";
 import { EnvironmentMachineKind, ThreadEnvMode, WorktreeSubmodules } from "./environment.ts";
 import { KeybindingShortcut } from "./keybindings.ts";
@@ -1215,6 +1216,7 @@ export const ServerSettings = Schema.Struct({
   cursorKeychainUsageEnabled: Schema.Boolean.pipe(
     Schema.withDecodingDefault(Effect.succeed(false)),
   ),
+  jira: JiraSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
 
   usagePriceOverrides: Schema.Record(TrimmedNonEmptyString, UsageModelPriceOverride).pipe(
     Schema.withDecodingDefault(Effect.succeed({})),
@@ -1476,6 +1478,7 @@ export const ServerSettingsPatch = Schema.Struct({
     Schema.Record(UsageLimitSourceId, Schema.NullOr(UsageLimitSourceConfig)),
   ),
   cursorKeychainUsageEnabled: Schema.optionalKey(Schema.Boolean),
+  jira: Schema.optionalKey(JiraSettingsPatch),
 
   usagePriceOverrides: Schema.optionalKey(
     Schema.Record(TrimmedNonEmptyString, Schema.NullOr(UsageModelPriceOverride)),
@@ -1494,7 +1497,12 @@ export function requiredScopesForServerSettingsPatch(
   let changesSettings = false;
   for (const [key, value] of Object.entries(patch)) {
     if (value === undefined) continue;
-    if (key === "providers" || key === "providerInstances" || key === "usageLimitSources") {
+    if (
+      key === "providers" ||
+      key === "providerInstances" ||
+      key === "usageLimitSources" ||
+      key === "jira"
+    ) {
       changesProviders = true;
     } else {
       changesSettings = true;

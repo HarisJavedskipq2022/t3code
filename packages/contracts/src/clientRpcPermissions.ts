@@ -32,6 +32,7 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.vetRun]: AuthOrchestrationOperateScope,
   [WS_METHODS.vetCancel]: AuthOrchestrationOperateScope,
   [WS_METHODS.vetUpdateFinding]: AuthOrchestrationOperateScope,
+  [WS_METHODS.jiraTransitionIssue]: AuthOrchestrationOperateScope,
   [WS_METHODS.sourceControlCloneRepository]: AuthSourceControlWriteScope,
   [WS_METHODS.sourceControlPublishRepository]: AuthSourceControlWriteScope,
   [WS_METHODS.projectCloneStart]: AuthSourceControlWriteScope,

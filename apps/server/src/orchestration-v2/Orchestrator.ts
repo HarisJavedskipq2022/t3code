@@ -3,6 +3,7 @@ import type {
   OrchestrationV2SearchThreadResult,
   OrchestrationV2ThreadHistoryPage,
 } from "@t3tools/contracts";
+import { jiraPullRequestEffects } from "../jira/jiraPullRequestStages.ts";
 import {
   latestExecutedRun,
   latestRootProviderFailure,
@@ -2224,6 +2225,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       interactionMode: command.interactionMode,
       branch: command.branch,
       worktreePath: command.worktreePath,
+      ...(command.linkedTicket === undefined ? {} : { linkedTicket: command.linkedTicket }),
       activeProviderThreadId: null,
       lineage: {
         parentThreadId: null,
@@ -2970,6 +2972,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
                 : {}),
             ...(command.branch === undefined ? {} : { branch: command.branch }),
             ...(command.worktreePath === undefined ? {} : { worktreePath: command.worktreePath }),
+            ...(command.linkedTicket === undefined ? {} : { linkedTicket: command.linkedTicket }),
             ...(command.linkedPullRequest === undefined
               ? {}
               : {
@@ -3207,6 +3210,9 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           };
       }
     })();
+    const jiraEffects = jiraPullRequestEffects(thread, updatedThread, command.commandId);
+    if (jiraEffects.length > 0)
+      yield* Ref.update(effects, (existing) => [...existing, ...jiraEffects]);
     if (
       command.type === "thread.pull-request-link.sync" ||
       command.type === "thread.pull-request-watch.sync"

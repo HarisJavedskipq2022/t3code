@@ -1,4 +1,5 @@
 import { type EnvironmentId, type ScopedProjectRef } from "@t3tools/contracts";
+import { SidebarTicketChip } from "./jira/ThreadTicketChip";
 import type { EnvironmentServerConfig } from "@t3tools/client-runtime/connection";
 import { ThreadHoverCard, ThreadHoverCardPopup } from "./ThreadHoverCard";
 import { CollapsibleSectionHeader } from "./ui/collapsible-section-header";
@@ -2193,6 +2194,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                 Regenerating title
               </span>
             ) : null}
+            {thread.linkedTicket ? <SidebarTicketChip ticket={thread.linkedTicket} /> : null}
             {prBadge}
             {sortable?.isDragging ? (
               dragDestination
@@ -2537,6 +2539,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                 <span className="flex-1" />
               )}
               {terminalStatusIcon}
+              {thread.linkedTicket ? <SidebarTicketChip ticket={thread.linkedTicket} /> : null}
               {prBadge}
               {diff ? (
                 <span className="shrink-0 font-mono">

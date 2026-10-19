@@ -5,6 +5,7 @@ import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import {
   CommandId,
   type ChatAttachment,
+  type ThreadLinkedTicket,
   type MessageId,
   type ModelSelection,
   type OrchestrationV2Actor,
@@ -87,6 +88,7 @@ export interface ThreadLaunchInput {
   readonly interactionMode: ProviderInteractionMode;
   readonly fusion?: OrchestrationV2ThreadFusion | null;
   readonly workspaceStrategy: ThreadLaunchWorkspaceStrategy;
+  readonly linkedTicket?: ThreadLinkedTicket;
   readonly initialMessage?: ThreadLaunchInitialMessage;
   readonly importedNativeThread?: {
     readonly ref: {
@@ -926,6 +928,7 @@ const make = Effect.gen(function* () {
                 interactionMode: input.interactionMode,
                 branch: initialBranch,
                 worktreePath: initialWorktreePath,
+                ...(input.linkedTicket === undefined ? {} : { linkedTicket: input.linkedTicket }),
                 ...(input.importedNativeThread === undefined
                   ? {}
                   : { importedNativeThread: input.importedNativeThread }),

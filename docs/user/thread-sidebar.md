@@ -31,6 +31,22 @@ folder, so the files the agent wrote stay until you delete them. Branch, worktre
 these folders are not Git repositories. This is unavailable when the data
 directory itself sits inside a Git checkout.
 
+### Start from a Jira ticket
+
+On web and desktop, connect Jira Cloud in **Settings → Integrations → Jira** with your site,
+email, and an API token from id.atlassian.com. The token stays on the environment's server.
+Then choose **Start from Jira ticket…** in the command palette. It lists the open tickets
+assigned to you; type a key such as `SHP-4158` or words to search. Pick a project and press
+**Open draft**: you get a new worktree draft on a branch named after the ticket (`fix/` for
+bugs, `feat/` otherwise) with the ticket's description and attachment links as the message.
+Edit it before you send.
+
+The ticket shows on the thread's sidebar row and in the branch toolbar, where its menu moves
+the ticket to another status, opens it in Jira, or unlinks it. When the thread's first pull
+request opens, the server comments its link on the ticket. To also move the ticket when the
+pull request opens or merges, enter a status name, such as `In Review` or `Done`, in the Jira
+settings. These updates run even when your apps are closed.
+
 ### Start in the background
 
 In a desktop browser or the desktop app, press `Cmd+Enter` on macOS or `Ctrl+Enter`

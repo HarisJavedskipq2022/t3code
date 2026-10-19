@@ -13,6 +13,8 @@ import {
   RunId,
   RuntimeRequestId,
   ThreadId,
+  ThreadLinkedPullRequest,
+  TrimmedNonEmptyString,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
@@ -114,6 +116,13 @@ export const OrchestrationEffectRequestV2 = Schema.Union([
     type: Schema.Literal("delegated-tasks.stop"),
     reason: Schema.optional(Schema.String),
   }),
+  Schema.Struct({
+    type: Schema.Literal("jira.pull-request-stage"),
+    key: TrimmedNonEmptyString,
+    stage: Schema.Literals(["opened", "merged"]),
+    pullRequestUrl: TrimmedNonEmptyString,
+    linkBranchPullRequest: Schema.optional(ThreadLinkedPullRequest),
+  }),
 ]);
 export type OrchestrationEffectRequestV2 = typeof OrchestrationEffectRequestV2.Type;
 
@@ -127,6 +136,8 @@ export const REPLAY_SAFE_EFFECT_TYPES_AFTER_PROCESS_LOSS = [
   "attachment.cleanup",
   "thread-title.generate",
   "delegated-tasks.stop",
+  // Repeatable: the comment is skipped when present, the move when already in that status.
+  "jira.pull-request-stage",
 ] as const satisfies ReadonlyArray<OrchestrationEffectRequestV2["type"]>;
 
 export const PROCESS_BOUND_EFFECT_TYPES = [
