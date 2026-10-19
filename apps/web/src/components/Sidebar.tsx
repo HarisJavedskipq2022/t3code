@@ -291,6 +291,8 @@ import {
   useSidebarProjectGroupKeys,
 } from "./sidebar/sidebarProjectGroups";
 import { SidebarHeaderIconButton, SidebarThreadHeader } from "./sidebar/SidebarThreadHeader";
+import { SplitPaneRowMarker } from "./split/SplitPaneHeader";
+import { openInFocusedSplitPane, openThreadInSplit } from "./split/splitViewStore";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuShortcut, MenuTrigger } from "./ui/menu";
 import { Tooltip, TooltipPopup, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 import { MiddleTruncate } from "./ui/middle-truncate";
@@ -2148,10 +2150,11 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
         {...sortableRootProps}
         {...(fileDropHandlers ?? {})}
         className={cn(
-          "list-none [content-visibility:auto] [contain-intrinsic-size:auto_36px]",
-          sortable?.isDragging && "relative z-20",
+          "relative list-none [content-visibility:auto] [contain-intrinsic-size:auto_36px]",
+          sortable?.isDragging && "z-20",
         )}
       >
+        <SplitPaneRowMarker threadKey={threadKey} isRouteThread={props.isActive} />
         <Tooltip disabled={sortable?.isDragging}>
           <TooltipTrigger
             render={
@@ -2307,10 +2310,11 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
       {...sortableRootProps}
       {...(fileDropHandlers ?? {})}
       className={cn(
-        "list-none py-0.5 [content-visibility:auto] [contain-intrinsic-size:auto_78px]",
-        sortable?.isDragging && "relative z-20",
+        "relative list-none py-0.5 [content-visibility:auto] [contain-intrinsic-size:auto_78px]",
+        sortable?.isDragging && "z-20",
       )}
     >
+      <SplitPaneRowMarker threadKey={threadKey} isRouteThread={props.isActive} />
       <Tooltip disabled={snoozeMenuOpen || sortable?.isDragging}>
         <TooltipTrigger
           render={
@@ -3146,6 +3150,7 @@ export default function Sidebar() {
     if (isMobile) {
       setOpenMobile(false);
     }
+    if (openInFocusedSplitPane(threadRef, routeThreadKey)) return Promise.resolve();
     return router.navigate({
       to: "/$environmentId/$threadId",
       params: buildThreadRouteParams(threadRef),
@@ -3256,6 +3261,11 @@ export default function Sidebar() {
     const isMac = isMacPlatform(navigator.platform);
     const isModClick = isMac ? event.metaKey : event.ctrlKey;
     const threadKey = scopedThreadKey(threadRef);
+    if (event.altKey && !isModClick && !event.shiftKey) {
+      event.preventDefault();
+      openThreadInSplit(threadRef, routeThreadKey);
+      return;
+    }
     if (isModClick) {
       event.preventDefault();
       toggleThreadSelection(threadKey);
@@ -4320,6 +4330,7 @@ export default function Sidebar() {
         const clicked = await settlePromise(() =>
           api.contextMenu.show(
             buildThreadActionMenuItems({
+              canOpenInSplit: threadKey !== routeThreadKey,
               canOperate: readEnvironmentScope(
                 threadRef.environmentId,
                 AuthOrchestrationOperateScope,
@@ -4376,6 +4387,9 @@ export default function Sidebar() {
                 environmentId: threadRef.environmentId,
                 projectId: thread.projectId,
               });
+            return;
+          case "open-in-split":
+            openThreadInSplit(threadRef, routeThreadKey);
             return;
           case "new-thread-on-branch": {
             const result = await settlePromise(() =>

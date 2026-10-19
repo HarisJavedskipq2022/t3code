@@ -89,7 +89,10 @@ describe("KeybindingsSettings.logic", () => {
       groupKeybindingRows(
         filterKeybindingRows(buildKeybindingRows(DEFAULT_RESOLVED_KEYBINDINGS), "split"),
       ),
-    ).toEqual([expect.objectContaining({ id: "terminal" })]);
+    ).toEqual([
+      expect.objectContaining({ id: "threads" }),
+      expect.objectContaining({ id: "terminal" }),
+    ]);
   });
   it("orders Usage bindings and command choices like the page", () => {
     const expected = [

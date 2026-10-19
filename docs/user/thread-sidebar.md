@@ -192,6 +192,20 @@ On web and desktop, right-click a pull request link in a thread and choose
 same link to return to the branch PR, if one exists.
 The linked pull request participates in automatic settlement.
 
+## Work on two threads side by side
+
+On web and desktop, Option-click (Alt-click) a thread in the sidebar, or choose **Open in split
+view** from its menu, to open it beside the current thread. **Cmd+\\** (Ctrl+\\) opens and
+closes the split, reopening the last thread you had there, and **Cmd+Option+\\** moves the
+keyboard to the other pane.
+
+The pane you last clicked takes your typing and shortcuts, and a sidebar click opens the thread
+in that pane. Each pane has its own border color, and its thread's sidebar row shows the same
+color. The diff, browser, and terminal panels stay with the main (left) thread; use **Swap
+panes** or **Open as main thread** in the second pane's header to bring them to its thread. Drag
+the divider to resize the panes, or double-click it to split them evenly. The split hides while
+the window is too narrow for both and returns when it widens.
+
 ## Find and reference work
 
 On web and desktop, open the command palette with `Cmd/Ctrl+K` to search threads

@@ -24,6 +24,13 @@ export interface ChatShortcutsInput {
     readonly modelPickerOpen: boolean;
   };
   readonly threadFindActive: boolean;
+  /**
+   * Whether this chat takes the event at all. A side chat mounts a second chat
+   * view, so each one claims only the keys meant for it.
+   */
+  readonly claimsEvent?: (event: KeyboardEvent) => boolean;
+  /** Whether this chat runs a resolved command; others pass through untouched. */
+  readonly runsCommand?: (command: KeybindingCommand) => boolean;
   /** Types a printable key into the composer; false when it could not take it. */
   readonly typeIntoComposer: (key: string) => boolean;
   readonly closeThreadFind: () => void;
@@ -46,6 +53,7 @@ export function useChatShortcuts(input: ChatShortcutsInput) {
     const handler = (event: KeyboardEvent) => {
       const current = latest.current;
       const { keybindings } = current;
+      if (current.claimsEvent && !current.claimsEvent(event)) return;
       if (preventRepeatedTerminalCloseShortcut(event, keybindings)) {
         event.stopPropagation();
         return;
@@ -75,6 +83,7 @@ export function useChatShortcuts(input: ChatShortcutsInput) {
         context: shortcutContext,
       });
       if (!command) return;
+      if (current.runsCommand && !current.runsCommand(command)) return;
       const run = current.commands[command] ?? current.fallback(command);
       if (!run || run({ event, terminalFocusOwner }) === false) return;
       event.preventDefault();

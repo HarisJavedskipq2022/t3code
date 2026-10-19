@@ -324,7 +324,10 @@ let rememberedThreadTimelines = new Map<string, HeldThreadTimeline<readonly unkn
 let rememberedThreadTimelineOrder: string[] = [];
 let lastReadyThreadKey: string | null = null;
 
-function rememberThreadTimelineEntries(held: HeldThreadTimeline<readonly unknown[]>): void {
+function rememberThreadTimelineEntries(
+  held: HeldThreadTimeline<readonly unknown[]>,
+  asLastReady: boolean,
+): void {
   if (held.threadKey === null) {
     return;
   }
@@ -339,16 +342,21 @@ function rememberThreadTimelineEntries(held: HeldThreadTimeline<readonly unknown
       rememberedThreadTimelines.delete(evicted);
     }
   }
-  lastReadyThreadKey = held.threadKey;
+  if (asLastReady) lastReadyThreadKey = held.threadKey;
 }
 
+/**
+ * `asLastReady: false` remembers the timeline without making it the one other
+ * threads show while they load: an embedded side chat is not the route thread.
+ */
 export function rememberReadyThreadTimeline<T extends readonly unknown[]>(
   held: HeldThreadTimeline<T>,
+  options: { readonly asLastReady?: boolean } = {},
 ): void {
   if (held.threadKey === null || held.entries.length === 0) {
     return;
   }
-  rememberThreadTimelineEntries(held);
+  rememberThreadTimelineEntries(held, options.asLastReady ?? true);
 }
 
 export function peekRememberedThreadTimeline<T extends readonly unknown[]>(
@@ -403,6 +411,8 @@ export function resolveThreadSwitchTimeline<T extends readonly unknown[]>(input:
   nextEntries: T;
   rememberedForActive?: T | null;
   lastReady?: HeldThreadTimeline<T> | null;
+  /** False keeps another thread's timeline out while this one loads. */
+  allowOtherThread?: boolean;
 }): { entries: T; displayThreadKey: string | null } {
   if (input.nextEntries.length > 0) {
     return { entries: input.nextEntries, displayThreadKey: input.activeThreadKey };
@@ -414,6 +424,9 @@ export function resolveThreadSwitchTimeline<T extends readonly unknown[]>(input:
     return { entries: rememberedForActive, displayThreadKey: input.activeThreadKey };
   }
 
+  if (input.allowOtherThread === false) {
+    return { entries: input.nextEntries, displayThreadKey: input.activeThreadKey };
+  }
   const lastReady = input.lastReady ?? peekHeldThreadTimeline<T>();
   if (
     input.loading &&

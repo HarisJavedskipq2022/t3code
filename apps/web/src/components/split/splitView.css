@@ -1,0 +1,6 @@
+/* The route thread's panel controls float over its pane's top right, as they
+   do over the window when there is no split; its header keeps clear of them.
+   7rem matches the room the right panel's own header leaves for them. */
+[data-split-pane="primary"][data-split-shown] [data-chat-header] {
+  padding-right: calc(var(--workspace-gutter-end) + 7rem);
+}
