@@ -574,6 +574,9 @@ export function useSettingsRestore(onRestored?: () => void) {
     DEFAULT_UNIFIED_SETTINGS.sidebarGroupByProjectEnabled
       ? ["Group threads by project"]
       : []),
+    ...(settings.sidebarUsageStripEnabled !== DEFAULT_UNIFIED_SETTINGS.sidebarUsageStripEnabled
+      ? ["Usage limits in sidebar"]
+      : []),
     ...(settings.sidebarAutoSettleAfterDays !== DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleAfterDays
       ? ["Auto-settle inactive threads"]
       : []),
@@ -743,6 +746,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       sidebarProjectSortOrder: DEFAULT_UNIFIED_SETTINGS.sidebarProjectSortOrder,
       sidebarWorkingShelfEnabled: DEFAULT_UNIFIED_SETTINGS.sidebarWorkingShelfEnabled,
       sidebarGroupByProjectEnabled: DEFAULT_UNIFIED_SETTINGS.sidebarGroupByProjectEnabled,
+      sidebarUsageStripEnabled: DEFAULT_UNIFIED_SETTINGS.sidebarUsageStripEnabled,
       sidebarAutoSettleAfterDays: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleAfterDays,
       sidebarAutoSettleKeepPullRequests: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleKeepPullRequests,
       sidebarAutoSettleOnMerge: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleOnMerge,
@@ -2300,6 +2304,33 @@ export function GeneralSettingsPanel() {
                 updateSettings({ sidebarGroupByProjectEnabled: Boolean(checked) })
               }
               aria-label="Group threads by project"
+            />
+          }
+        />
+
+        <SettingsRow
+          {...searchableSetting("sidebar-usage-limits")}
+          description="Show how much of each provider's subscription limit is left at the bottom of the sidebar."
+          resetAction={
+            settings.sidebarUsageStripEnabled !==
+            DEFAULT_UNIFIED_SETTINGS.sidebarUsageStripEnabled ? (
+              <SettingResetButton
+                label="sidebar usage limits"
+                onClick={() =>
+                  updateSettings({
+                    sidebarUsageStripEnabled: DEFAULT_UNIFIED_SETTINGS.sidebarUsageStripEnabled,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.sidebarUsageStripEnabled}
+              onCheckedChange={(checked) =>
+                updateSettings({ sidebarUsageStripEnabled: Boolean(checked) })
+              }
+              aria-label="Usage limits in sidebar"
             />
           }
         />

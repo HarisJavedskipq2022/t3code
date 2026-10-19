@@ -329,6 +329,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["sidebar repository repo headers sections organize"],
   },
   {
+    id: "sidebar-usage-limits",
+    title: "Usage limits in sidebar",
+    to: "/settings/general",
+    searchTerms: ["quota subscription remaining bar meter footer codex claude cursor"],
+  },
+  {
     id: "auto-settle-inactive-threads",
     title: "Auto-settle inactive threads",
     to: "/settings/general",

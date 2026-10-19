@@ -99,6 +99,13 @@ Opening Limits checks the selected connected environments automatically. Each cl
 least five minutes between automatic checks of an environment, including after a failed check.
 If a window still looks stale, refresh Limits to re-check every provider and hub.
 
+On web and desktop, the bottom of the sidebar shows how much is left for each provider, using
+whichever of its windows is closest to running out, with the time until that window resets. Hover
+a provider for all of its windows, or click it to open **Usage → Limits**. Click **Limits left** to
+fold the list to the one provider closest to its limit. Turn it off with **Settings → General →
+Usage limits in sidebar**. Like Limits, it shows the last reading and refreshes as your agents
+report usage.
+
 Pick `/usage-limits` from the composer's command menu, or send it as a message, to check the
 current model's limits without leaving the conversation. The result opens above the composer and
 closes when you dismiss it or send your next message. It uses the same snapshot as **Usage → Limits**, so it does not run the agent or refresh
