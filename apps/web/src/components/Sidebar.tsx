@@ -203,7 +203,6 @@ import {
   isSidebarThreadWorking,
   isTrailingDoubleClick,
   orderItemsByPreferredIds,
-  planSidebarThreadDrop,
   reduceSidebarProjectScopeMenuState,
   resolveAdjacentThreadId,
   resolveSidebarSweepKeys,
@@ -281,21 +280,23 @@ import {
 import { SidebarContent, SidebarGroup, useSidebar } from "./ui/sidebar";
 import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
 import {
-  foldProjectGroups,
-  groupThreadsByProject,
-  indexProjectGroupHeaders,
-  insertProjectGroupHeaders,
+  foldSidebarProjectGroups,
+  groupSidebarSections,
   parseProjectGroupMarker,
-  regroupActiveDrop,
-  resolveThreadProjectGroup,
+  planProjectGroupedThreadDrop,
+  projectGroupField,
   SidebarProjectGroupHeader,
-  threadNeedsUser,
   useCollapsedProjectGroups,
   useSidebarProjectGroupKeys,
+  withProjectGroupHeaders,
 } from "./sidebar/sidebarProjectGroups";
 import { SidebarHeaderIconButton, SidebarThreadHeader } from "./sidebar/SidebarThreadHeader";
 import { SplitPaneRowMarker } from "./split/SplitPaneHeader";
-import { openInFocusedSplitPane, openThreadInSplit } from "./split/splitViewStore";
+import {
+  openInFocusedSplitPane,
+  openThreadInSplit,
+  openThreadInSplitOnAltClick,
+} from "./split/splitViewStore";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuShortcut, MenuTrigger } from "./ui/menu";
 import { Tooltip, TooltipPopup, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 import { MiddleTruncate } from "./ui/middle-truncate";
@@ -469,14 +470,8 @@ function useSidebarThreads(input: {
   readonly routeThreadRef: ScopedThreadRef | null;
   readonly projectGroupKeys: ReadonlyMap<string, string> | null;
 }) {
-  const {
-    projectScopeKey,
-    scopedProjectKeys,
-    serverConfigs,
-    optimisticDrop,
-    routeThreadRef,
-    projectGroupKeys,
-  } = input;
+  const { projectScopeKey, scopedProjectKeys, serverConfigs, optimisticDrop, routeThreadRef } =
+    input;
   const threads = useThreadShells();
   const routeRowThreadKey =
     routeThreadRef === null
@@ -516,7 +511,7 @@ function useSidebarThreads(input: {
     false,
     Schema.Boolean,
   );
-  const { collapsedGroups, toggleProjectGroup } = useCollapsedProjectGroups();
+  const collapsedProjectGroups = useCollapsedProjectGroups();
   // The settled tail restarts whenever the project scope changes.
   const [settledTail, setSettledTail] = useState({
     scopeKey: projectScopeKey,
@@ -539,10 +534,8 @@ function useSidebarThreads(input: {
   const partitionNextWakeAt = partition.snoozedThreads[0]?.snoozedUntil ?? null;
   if (partitionNextWakeAt !== nextSnoozeWakeAt) setNextSnoozeWakeAt(partitionNextWakeAt);
 
-  const { pinnedThreads, settledThreads } = partition;
-  const activeThreads = groupThreadsByProject(partition.activeThreads, projectGroupKeys);
-  const workingThreads = groupThreadsByProject(partition.workingThreads, projectGroupKeys);
-  const snoozedThreads = groupThreadsByProject(partition.snoozedThreads, projectGroupKeys);
+  const sections = { ...partition, ...groupSidebarSections(partition, input.projectGroupKeys) };
+  const { pinnedThreads, activeThreads, workingThreads, snoozedThreads, settledThreads } = sections;
   const visibleSettledThreads = (() => {
     if (settledThreads.length <= settledVisibleCount) return settledThreads;
     const visible = settledThreads.slice(0, settledVisibleCount);
@@ -554,44 +547,33 @@ function useSidebarThreads(input: {
     }
     return visible;
   })();
-  const foldGroups = (section: SidebarSection, list: readonly EnvironmentThreadShell[]) =>
-    foldProjectGroups({
-      section,
-      threads: list,
-      groupKeys: projectGroupKeys,
-      collapsedGroups,
-      keep: (thread) => threadShellKey(thread) === routeRowThreadKey || threadNeedsUser(thread),
-    });
-  const activeFold = foldGroups("active", activeThreads);
-  const settledFold = foldGroups(
-    "settled",
-    groupThreadsByProject(
-      settledShelfExpanded
-        ? visibleSettledThreads
-        : routeThreadOnly(visibleSettledThreads, routeRowThreadKey),
-      projectGroupKeys,
-    ),
-  );
-  const snoozedFold = foldGroups(
-    "snoozed",
-    snoozedShelfExpanded ? snoozedThreads : routeThreadOnly(snoozedThreads, routeRowThreadKey),
-  );
-  const workingFold = foldGroups(
-    "working",
-    workingShelfExpanded ? workingThreads : routeThreadOnly(workingThreads, routeRowThreadKey),
-  );
-  const projectGroupHeaders = {
-    active: activeFold.headers,
-    working: workingFold.headers,
-    snoozed: snoozedFold.headers,
-    settled: settledFold.headers,
-  };
-  const renderedSettledThreads = settledFold.visible;
-  const visibleSnoozedThreads = snoozedFold.visible;
-  const visibleWorkingThreads = workingFold.visible;
+  const settledShelfThreads = settledShelfExpanded
+    ? visibleSettledThreads
+    : routeThreadOnly(visibleSettledThreads, routeRowThreadKey);
+  const snoozedShelfThreads = snoozedShelfExpanded
+    ? snoozedThreads
+    : routeThreadOnly(snoozedThreads, routeRowThreadKey);
+  const workingShelfThreads = workingShelfExpanded
+    ? workingThreads
+    : routeThreadOnly(workingThreads, routeRowThreadKey);
+  const {
+    visibleActiveThreads,
+    renderedSettledThreads,
+    visibleSnoozedThreads,
+    visibleWorkingThreads,
+    ...projectGroupFolds
+  } = foldSidebarProjectGroups({
+    groupKeys: input.projectGroupKeys,
+    collapse: collapsedProjectGroups,
+    routeRowThreadKey,
+    active: activeThreads,
+    working: workingShelfThreads,
+    snoozed: snoozedShelfThreads,
+    settled: settledShelfThreads,
+  });
   const orderedThreads = [
     ...pinnedThreads,
-    ...activeFold.visible,
+    ...visibleActiveThreads,
     ...visibleWorkingThreads,
     ...visibleSnoozedThreads,
     ...renderedSettledThreads,
@@ -608,10 +590,7 @@ function useSidebarThreads(input: {
   }
   return {
     routeRowThreadKey,
-    ...partition,
-    activeThreads,
-    workingThreads,
-    snoozedThreads,
+    ...sections,
     threads,
     workingShelfEnabled,
     searchableThreads: [
@@ -637,17 +616,15 @@ function useSidebarThreads(input: {
     renderedSettledThreads,
     visibleSnoozedThreads,
     visibleWorkingThreads,
-    visibleActiveThreads: activeFold.visible,
-    projectGroupHeaders,
-    projectGroupHeaderByMarker: indexProjectGroupHeaders(projectGroupHeaders),
-    toggleProjectGroup,
+    visibleActiveThreads,
+    ...projectGroupFolds,
     orderedThreadKeys: orderedThreads.map(threadShellKey),
     threadByKey: new Map(orderedThreads.map((thread) => [threadShellKey(thread), thread] as const)),
     settledThreadKeys: new Set(settledThreads.map(threadShellKey)),
     snoozedThreadKeys: new Set(snoozedThreads.map(threadShellKey)),
     sectionByThreadKey,
     pinnedKeys: pinnedThreads.map(threadShellKey),
-    activeKeys: activeFold.visible.map(threadShellKey),
+    activeKeys: visibleActiveThreads.map(threadShellKey),
     pinnedKeysById: new Map(
       threads.map((thread) => [threadShellKey(thread), thread.pinOrderKey ?? null] as const),
     ),
@@ -2367,26 +2344,21 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
           >
             <div className="flex h-5 min-w-0 items-center gap-1.5">
               {draftIndicator}
-              {props.compact ? (
-                title
-              ) : (
-                <>
-                  {props.project ? (
-                    <ProjectFavicon project={props.project} className="size-4 shrink-0" />
-                  ) : null}
-                  {props.projectDisplayName ? (
-                    <span
-                      className={cn(
-                        "min-w-0 flex-1 truncate text-secondary-label text-xs",
-                        shouldRecede ? "font-normal" : "font-medium",
-                      )}
-                    >
-                      {props.projectDisplayName}
-                    </span>
-                  ) : (
-                    <span className="flex-1" />
+              {props.compact ? title : null}
+              {props.project && !props.compact ? (
+                <ProjectFavicon project={props.project} className="size-4 shrink-0" />
+              ) : null}
+              {props.projectDisplayName && !props.compact ? (
+                <span
+                  className={cn(
+                    "min-w-0 flex-1 truncate text-secondary-label text-xs",
+                    shouldRecede ? "font-normal" : "font-medium",
                   )}
-                </>
+                >
+                  {props.projectDisplayName}
+                </span>
+              ) : props.compact ? null : (
+                <span className="flex-1" />
               )}
               {pinIndicator}
               {sortable?.isDragging ? (
@@ -3287,11 +3259,7 @@ export default function Sidebar() {
     const isMac = isMacPlatform(navigator.platform);
     const isModClick = isMac ? event.metaKey : event.ctrlKey;
     const threadKey = scopedThreadKey(threadRef);
-    if (event.altKey && !isModClick && !event.shiftKey) {
-      event.preventDefault();
-      openThreadInSplit(threadRef, routeThreadKey);
-      return;
-    }
+    if (openThreadInSplitOnAltClick(event, isModClick, threadRef, routeThreadKey)) return;
     if (isModClick) {
       event.preventDefault();
       toggleThreadSelection(threadKey);
@@ -3634,27 +3602,21 @@ export default function Sidebar() {
     });
   };
   const sidebarListItemsFresh = ((): readonly SidebarListItem[] => {
-    const rowsOf = (
+    const threadRowsOf = (
       list: readonly EnvironmentThreadShell[],
       section: SidebarSection,
-    ): SidebarListItem[] => {
-      const rows = list.map((thread) => ({
-        kind: "thread" as const,
-        key: scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
+    ): SidebarListItem[] =>
+      list.map((thread) => {
+        const key = scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
+        return { kind: "thread", key, section, ...projectGroupField(thread, projectGroupKeys) };
+      });
+    const rowsOf = (list: readonly EnvironmentThreadShell[], section: SidebarSection) =>
+      withProjectGroupHeaders(
         section,
-        ...(projectGroupKeys && {
-          projectGroup: resolveThreadProjectGroup(thread, projectGroupKeys),
-        }),
-      }));
-      return projectGroupKeys === null || section === "pinned"
-        ? rows
-        : insertProjectGroupHeaders(
-            section,
-            rows,
-            (row) => row.projectGroup,
-            projectGroupHeaders[section].map((header) => header.key),
-          );
-    };
+        threadRowsOf(list, section),
+        projectGroupKeys,
+        projectGroupHeaders,
+      );
     if (
       pinnedThreads.length +
         activeThreads.length +
@@ -3772,17 +3734,10 @@ export default function Sidebar() {
     if (source === undefined) return createSidebarCollisionDetection(() => false);
     return createSidebarCollisionDetection(
       (id) => {
-        const resolved = resolveSidebarDropTarget(sidebarListItems, draggedThreadKey, id);
-        if (resolved === null) return false;
-        const { target, activeKeysById: plannedActiveKeysById } = regroupActiveDrop({
-          enabled: projectGroupKeys !== null,
-          target: resolved,
-          activeKey: draggedThreadKey,
-          activeKeysById,
-          items: sidebarListItems,
-        });
+        const target = resolveSidebarDropTarget(sidebarListItems, draggedThreadKey, id);
+        if (target === null) return false;
         return (
-          planSidebarThreadDrop({
+          planProjectGroupedThreadDrop({
             activeKey: draggedThreadKey,
             activeSection: draggedFromSection,
             activePinned: source.pinnedAt != null,
@@ -3795,9 +3750,10 @@ export default function Sidebar() {
             pinnedKeysById,
             reorderableKeys: draggableThreadKeys,
             activeOrder: activeKeys,
-            activeKeysById: plannedActiveKeysById,
+            activeKeysById,
             activeReorderableKeys: activeReorderableThreadKeys,
             activeTimeOrdered: workingShelfEnabled,
+            groupedItems: projectGroupKeys === null ? null : sidebarListItems,
           }).kind !== "none"
         );
       },
@@ -3810,21 +3766,14 @@ export default function Sidebar() {
   const handleThreadDragEnd = (event: DragEndEvent) => {
     const activeKey = String(event.active.id);
     const activeSection = sectionByThreadKey.get(activeKey);
-    const resolved =
+    const target =
       event.over === null
         ? null
         : resolveSidebarDropTarget(sidebarListItems, activeKey, String(event.over.id));
     const activeThread = threadByKey.get(activeKey);
-    if (activeSection === undefined || resolved === null || activeThread === undefined) return;
-    const { target, activeKeysById: plannedActiveKeysById } = regroupActiveDrop({
-      enabled: projectGroupKeys !== null,
-      target: resolved,
-      activeKey,
-      activeKeysById,
-      items: sidebarListItems,
-    });
+    if (activeSection === undefined || target === null || activeThread === undefined) return;
     const threadRef = scopeThreadRef(activeThread.environmentId, activeThread.id);
-    const plan = planSidebarThreadDrop({
+    const plan = planProjectGroupedThreadDrop({
       activeKey,
       activeSection,
       activePinned: activeThread.pinnedAt != null,
@@ -3837,9 +3786,10 @@ export default function Sidebar() {
       pinnedKeysById,
       reorderableKeys: draggableThreadKeys,
       activeOrder: activeKeys,
-      activeKeysById: plannedActiveKeysById,
+      activeKeysById,
       activeReorderableKeys: activeReorderableThreadKeys,
       activeTimeOrdered: workingShelfEnabled,
+      groupedItems: projectGroupKeys === null ? null : sidebarListItems,
     });
     if (plan.kind === "none") return;
     if (plan.kind === "settle" && settlingThreadKeysRef.current.has(activeKey)) return;

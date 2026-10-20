@@ -184,6 +184,19 @@ export function openThreadInSplit(threadRef: ScopedThreadRef, routeThreadKey: st
   useSplitViewStore.getState().openSecondary(threadRef);
 }
 
+/** A plain Alt-click on a sidebar row opens its thread beside the route thread. */
+export function openThreadInSplitOnAltClick(
+  event: { readonly altKey: boolean; readonly shiftKey: boolean; preventDefault(): void },
+  isModClick: boolean,
+  threadRef: ScopedThreadRef,
+  routeThreadKey: string | null,
+): boolean {
+  if (!event.altKey || isModClick || event.shiftKey) return false;
+  event.preventDefault();
+  openThreadInSplit(threadRef, routeThreadKey);
+  return true;
+}
+
 /** Whether a chat view may take keyboard focus on its own; always true without a split. */
 export function splitPaneHasKeyboard(embedded: boolean): boolean {
   const state = useSplitViewStore.getState();

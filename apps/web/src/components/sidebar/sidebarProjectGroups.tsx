@@ -1,3 +1,5 @@
+import { scopeThreadRef, scopedThreadKey } from "@t3tools/client-runtime/environment";
+import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
 import { ChevronDownIcon } from "lucide-react";
 import { Schema } from "effect";
 
@@ -7,6 +9,7 @@ import { cn } from "../../lib/utils";
 import type { SidebarProjectSnapshot } from "../../sidebarProjectGrouping";
 import { ProjectFavicon } from "../ProjectFavicon";
 import {
+  planSidebarThreadDrop,
   resolveSidebarThreadStatus,
   type SidebarDropTarget,
   type SidebarListItem,
@@ -62,6 +65,18 @@ export function resolveThreadProjectGroup(
   return groupKeys.get(key) ?? key;
 }
 
+const NO_PROJECT_GROUP = {};
+
+/** A sidebar row's `projectGroup` field; absent while grouping is off. */
+export function projectGroupField(
+  thread: ProjectRef,
+  groupKeys: ReadonlyMap<string, string> | null,
+): { readonly projectGroup?: string } {
+  return groupKeys === null
+    ? NO_PROJECT_GROUP
+    : { projectGroup: resolveThreadProjectGroup(thread, groupKeys) };
+}
+
 /** Groups follow their first item, so the section's own order still decides which project leads. */
 export function groupByFirstAppearance<T>(items: readonly T[], groupOf: (item: T) => string): T[] {
   const groups = new Map<string, T[]>();
@@ -82,6 +97,25 @@ export function groupThreadsByProject<T extends ProjectRef>(
   return groupByFirstAppearance(threads, (thread) => resolveThreadProjectGroup(thread, groupKeys));
 }
 
+/**
+ * The sections whose rows sit under project headers. Pinned is ordered by hand,
+ * and settled is grouped only after its visible tail is cut.
+ */
+export function groupSidebarSections<T extends ProjectRef>(
+  sections: {
+    readonly activeThreads: readonly T[];
+    readonly workingThreads: readonly T[];
+    readonly snoozedThreads: readonly T[];
+  },
+  groupKeys: ReadonlyMap<string, string> | null,
+) {
+  return {
+    activeThreads: groupThreadsByProject(sections.activeThreads, groupKeys),
+    workingThreads: groupThreadsByProject(sections.workingThreads, groupKeys),
+    snoozedThreads: groupThreadsByProject(sections.snoozedThreads, groupKeys),
+  };
+}
+
 // Groups present in the rows keep their order; a folded group with no rows
 // left stays after the group it followed.
 function mergeGroupOrder(present: readonly string[], known: readonly string[]): string[] {
@@ -95,14 +129,14 @@ function mergeGroupOrder(present: readonly string[], known: readonly string[]): 
 }
 
 // Pinned is ordered by hand, so it stays one list.
-export function insertProjectGroupHeaders(
+export function insertProjectGroupHeaders<T extends SidebarListItem>(
   section: SidebarSection,
-  items: readonly ThreadItem[],
-  groupOf: (item: ThreadItem) => string | undefined,
+  items: readonly T[],
+  groupOf: (item: T) => string | undefined,
   knownGroups: readonly string[] = [],
 ): SidebarListItem[] {
   if (section === "pinned") return [...items];
-  const rowsByGroup = new Map<string | undefined, ThreadItem[]>();
+  const rowsByGroup = new Map<string | undefined, T[]>();
   for (const item of items) {
     const group = groupOf(item);
     const rows = rowsByGroup.get(group);
@@ -116,6 +150,23 @@ export function insertProjectGroupHeaders(
     result.push(...(rowsByGroup.get(group) ?? []));
   }
   return result;
+}
+
+/** A section's rows with a header above each project group; unchanged while grouping is off. */
+export function withProjectGroupHeaders(
+  section: SidebarSection,
+  rows: SidebarListItem[],
+  groupKeys: ReadonlyMap<string, string> | null,
+  headers: Readonly<Record<Exclude<SidebarSection, "pinned">, readonly ProjectGroupHeader[]>>,
+): SidebarListItem[] {
+  return groupKeys === null || section === "pinned"
+    ? rows
+    : insertProjectGroupHeaders(
+        section,
+        rows,
+        (row) => (row.kind === "thread" ? row.projectGroup : undefined),
+        headers[section].map((header) => header.key),
+      );
 }
 
 function projectGroupByThreadKey(items: readonly SidebarListItem[]) {
@@ -206,6 +257,51 @@ export function foldProjectGroups<T extends ProjectRef>(input: {
   };
 }
 
+/**
+ * Folds every grouped section, keeping the route thread and threads waiting on
+ * the user in sight, and reports the headers the sidebar draws above each group.
+ */
+export function foldSidebarProjectGroups(input: {
+  readonly groupKeys: ReadonlyMap<string, string> | null;
+  readonly collapse: ReturnType<typeof useCollapsedProjectGroups>;
+  readonly routeRowThreadKey: string | null;
+  readonly active: readonly EnvironmentThreadShell[];
+  readonly working: readonly EnvironmentThreadShell[];
+  readonly snoozed: readonly EnvironmentThreadShell[];
+  readonly settled: readonly EnvironmentThreadShell[];
+}) {
+  const { groupKeys, routeRowThreadKey } = input;
+  const fold = (section: SidebarSection, threads: readonly EnvironmentThreadShell[]) =>
+    foldProjectGroups({
+      section,
+      threads,
+      groupKeys,
+      collapsedGroups: input.collapse.collapsedGroups,
+      keep: (thread) =>
+        scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)) === routeRowThreadKey ||
+        threadNeedsUser(thread),
+    });
+  const activeFold = fold("active", input.active);
+  const settledFold = fold("settled", groupThreadsByProject(input.settled, groupKeys));
+  const snoozedFold = fold("snoozed", input.snoozed);
+  const workingFold = fold("working", input.working);
+  const projectGroupHeaders = {
+    active: activeFold.headers,
+    working: workingFold.headers,
+    snoozed: snoozedFold.headers,
+    settled: settledFold.headers,
+  };
+  return {
+    visibleActiveThreads: activeFold.visible,
+    visibleWorkingThreads: workingFold.visible,
+    visibleSnoozedThreads: snoozedFold.visible,
+    renderedSettledThreads: settledFold.visible,
+    projectGroupHeaders,
+    projectGroupHeaderByMarker: indexProjectGroupHeaders(projectGroupHeaders),
+    toggleProjectGroup: input.collapse.toggleProjectGroup,
+  };
+}
+
 type OrderKeys = ReadonlyMap<string, string | null | undefined>;
 
 /**
@@ -240,6 +336,26 @@ export function regroupActiveDrop(input: {
       ? activeKeysById
       : new Map([...activeKeysById, ...activeOrder.map((key) => [key, null] as const)]),
   };
+}
+
+/**
+ * `planSidebarThreadDrop` against the rows as the sidebar shows them.
+ * `groupedItems` is the sidebar's list while grouping is on, otherwise null.
+ */
+export function planProjectGroupedThreadDrop(
+  input: Parameters<typeof planSidebarThreadDrop>[0] & {
+    readonly groupedItems: readonly SidebarListItem[] | null;
+  },
+) {
+  const { groupedItems, ...plan } = input;
+  const regrouped = regroupActiveDrop({
+    enabled: groupedItems !== null,
+    target: plan.target,
+    activeKey: plan.activeKey,
+    activeKeysById: plan.activeKeysById,
+    items: groupedItems ?? [],
+  });
+  return planSidebarThreadDrop({ ...plan, ...regrouped });
 }
 
 export function indexProjectGroupHeaders(
