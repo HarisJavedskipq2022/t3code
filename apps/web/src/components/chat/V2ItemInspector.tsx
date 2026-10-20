@@ -31,6 +31,7 @@ import { resolveExternalWebLinkHref } from "./externalLinkContextMenu";
 import type { ExpandedImagePreview } from "./ExpandedImagePreview";
 import { ShellCommandBlock } from "./ShellCommandBlock";
 import { useReadableT3ToolArgs } from "./t3ToolArgs";
+import { parseToolError, ToolCallArgs, ToolCallError } from "./toolCallDetails";
 
 interface V2ItemInspectorProps {
   readonly projectedItem: OrchestrationV2ProjectedTurnItem;
@@ -168,7 +169,9 @@ function ToolOutput(props: ToolOutputState) {
     />
   ));
   const text = props.output ? (
-    <div className="max-h-80 overflow-auto text-muted-foreground">{props.output}</div>
+    <div className="max-h-80 overflow-auto rounded-md border border-border/45 bg-muted/15 p-2 text-muted-foreground">
+      {props.output}
+    </div>
   ) : props.pending ? (
     <div className="text-muted-foreground italic">Loading output…</div>
   ) : props.error ? (
@@ -201,32 +204,34 @@ function ToolCallBody(
   props: ToolOutputState & {
     readonly command?: string;
     readonly args?: unknown;
+    /** The original input, when `args` was rewritten for reading. */
+    readonly rawArgs?: unknown;
     readonly toolName?: string | null;
+    /** The call failed, so an error the provider returned in place of output gets its own box. */
+    readonly failed?: boolean;
     readonly exitCode?: number | undefined;
     /** Replaces the fetched output, e.g. with a command's live output. */
     readonly outputSlot?: ReactNode;
   },
 ) {
   const call = toolCallLines({ command: props.command, args: props.args });
+  const error = props.failed && props.output ? parseToolError(props.output) : null;
   return (
     <div className={cn("space-y-1.5", monoClassName)}>
       {call.command ? <ShellCommandBlock command={call.command} /> : null}
       {call.args ? (
-        <div className="text-foreground/85">
-          {call.args.map(([key, value]) => (
-            <div key={key}>
-              <span className="text-muted-foreground">{key} </span>
-              {key === "code" && isJavaScriptReplTool(props.toolName) ? (
-                <StructuredValue value={value} language="typescript" />
-              ) : (
-                value
-              )}
-            </div>
-          ))}
-        </div>
+        <ToolCallArgs
+          lines={call.args}
+          raw={props.rawArgs}
+          renderValue={(key, value) =>
+            key === "code" && isJavaScriptReplTool(props.toolName) ? (
+              <StructuredValue value={value} language="typescript" />
+            ) : undefined
+          }
+        />
       ) : null}
       {call.argsText ? <StructuredValue value={call.argsText} highlightJson /> : null}
-      {props.outputSlot ?? <ToolOutput {...props} />}
+      {props.outputSlot ?? (error ? <ToolCallError error={error} /> : <ToolOutput {...props} />)}
       {props.exitCode !== undefined && props.exitCode !== 0 ? (
         <div className="text-destructive">exit {props.exitCode}</div>
       ) : null}
@@ -235,10 +240,12 @@ function ToolCallBody(
 }
 
 export const V2ItemInspector = memo(function V2ItemInspector(props: V2ItemInspectorProps) {
-  // Command rows stream their output, including the final output, from the server.
+  // Command rows stream their output, including the final output, from the server. A command
+  // the provider never ran has only its refusal, which reads as an error box instead.
   const streamsOutput =
     useCommandOutputStreaming(props.environmentId) &&
-    props.projectedItem.item.type === "command_execution";
+    props.projectedItem.item.type === "command_execution" &&
+    props.projectedItem.item.toolNonExecutionKind === undefined;
   const fetched = useFetchedTurnItem(props.projectedItem, props.environmentId, streamsOutput);
   const item = fetched.item;
   const outputState = fetched.output;
@@ -268,6 +275,7 @@ export const V2ItemInspector = memo(function V2ItemInspector(props: V2ItemInspec
         <ToolCallBody
           command={item.input}
           exitCode={item.exitCode}
+          failed={item.status === "failed"}
           {...outputState}
           onImageExpand={props.onImageExpand}
           outputSlot={
@@ -380,6 +388,8 @@ export const V2ItemInspector = memo(function V2ItemInspector(props: V2ItemInspec
         <ToolCallBody
           toolName={item.toolName}
           args={toolArgs}
+          rawArgs={toolArgs === item.input ? undefined : item.input}
+          failed={item.status === "failed"}
           {...outputState}
           onImageExpand={props.onImageExpand}
         />
