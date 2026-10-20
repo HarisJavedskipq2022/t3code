@@ -28,7 +28,11 @@ import {
 import { Input } from "../ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { TicketTypeMark } from "./TicketTypeMark";
-import { linkedTicketOf, ticketBranchName, ticketPrompt } from "./ticketDraft.logic";
+import {
+  linkedTicketOf,
+  ticketBranchName,
+  ticketPrompt,
+} from "@t3tools/client-runtime/jira-ticket-draft";
 import { useTicketDraftStore } from "./ticketDraftStore";
 
 const SEARCH_DELAY_MS = 250;

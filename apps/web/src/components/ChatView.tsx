@@ -1,7 +1,7 @@
 import { formatFilePathForClipboard } from "@t3tools/client-runtime/media-actions";
 import { resolvePathLinkTarget } from "@t3tools/shared/fileLinks";
 import { ThreadFind, ThreadFindCanvas, type ThreadFindControls } from "./chat/ThreadFindProvider";
-import { withTicketBootstrap } from "./jira/ticketDraft.logic";
+import { withTicketBootstrap } from "@t3tools/client-runtime/jira-ticket-draft";
 import { clearTicketDraft, readTicketDraft } from "./jira/ticketDraftStore";
 import { fusionTurnStartField, useForkChatViewExtras } from "./chat/forkChatViewExtras";
 import { THREAD_FIND_BAR_RESERVED_HEIGHT } from "./chat/ThreadFindBar";

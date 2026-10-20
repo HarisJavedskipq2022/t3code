@@ -40,7 +40,8 @@ ticket** under a new thread's heading, or **Start from Jira ticket…** in the c
 assigned to you; type a key such as `SHP-4158` or words to search. Pick a project and press
 **Open draft**: you get a new worktree draft on a branch named after the ticket (`fix/` for
 bugs, `feat/` otherwise) with the ticket's description and attachment links as the message.
-Edit it before you send.
+Edit it before you send. On mobile, tap **Start from a Jira ticket** under a new task's
+heading; picking a ticket fills that task the same way.
 
 The ticket shows on the thread's sidebar row and in the branch toolbar, where its menu moves
 the ticket to another status, opens it in Jira, or unlinks it. When the thread's first pull

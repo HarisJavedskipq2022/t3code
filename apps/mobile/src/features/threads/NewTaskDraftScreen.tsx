@@ -140,6 +140,8 @@ import { selectIncomingShareAttachmentsForServer } from "../sharing/incoming-sha
 import { appAtomRegistry } from "../../state/atom-registry";
 import { serverEnvironment } from "../../state/server";
 import { fileRoutePathSegments } from "../files/filePath";
+import { clearTicketDraft } from "../jira/ticketDrafts";
+import { StartFromTicketLink } from "../jira/StartFromTicketLink";
 import { readEnvironmentScope, useEnvironmentScope } from "../../state/session";
 
 function NewTaskWorkspaceIcon(props: {
@@ -1320,6 +1322,7 @@ export function NewTaskDraftScreen(props: {
         clearWorkspaceSelection: true,
         deferAttachmentCleanup: true,
       });
+      clearTicketDraft(draftKey);
     }
     setSubmitNavigationAction(
       queuesInsteadOfStarting
@@ -1528,6 +1531,10 @@ export function NewTaskDraftScreen(props: {
       </View>
 
       {environmentControl}
+      <StartFromTicketLink
+        environmentId={selectedProject.environmentId}
+        disabled={isComposerInteractionLocked}
+      />
     </View>
   );
   const heroViewport = (

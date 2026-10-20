@@ -75,3 +75,10 @@ export function withTicketBootstrap<B extends Bootstrap>(
       : {}),
   };
 }
+
+/** Whether an environment's server has a Jira login to search and start from tickets. */
+export function isJiraConfigured(
+  jira: { readonly siteUrl: string; readonly email: string; readonly apiToken: string } | undefined,
+): boolean {
+  return Boolean(jira?.siteUrl && jira.email && jira.apiToken);
+}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { ticketBranchName, ticketPrompt, withTicketBootstrap } from "./ticketDraft.logic";
+import { ticketBranchName, ticketPrompt, withTicketBootstrap } from "./jiraTicketDraft.ts";
 
 const issue = {
   key: "SHP-4158",

@@ -1038,6 +1038,7 @@ export function useThreadOutboxDrain(): void {
           worktreePath: workspace.worktreePath,
           startFromOrigin: workspace.startFromOrigin ?? false,
           worktreeBranchName: buildTemporaryWorktreeBranchName(randomHex),
+          ...(creation.ticket ? { ticket: creation.ticket } : {}),
         }),
       });
       if (AsyncResult.isFailure(deliveryResult) && !hasAccess()) return true;

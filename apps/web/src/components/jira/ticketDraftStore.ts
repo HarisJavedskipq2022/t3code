@@ -2,7 +2,7 @@ import type { ThreadId } from "@t3tools/contracts";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
-import type { TicketDraft } from "./ticketDraft.logic";
+import type { TicketDraft } from "@t3tools/client-runtime/jira-ticket-draft";
 
 interface TicketDraftState {
   /** Keyed by the draft's future thread id, which survives a reload with the draft. */

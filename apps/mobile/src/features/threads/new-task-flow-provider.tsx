@@ -122,6 +122,7 @@ import {
 } from "./new-task-context-presentation";
 import { resolveEnvironmentProjectMatch } from "./new-task-project-selection";
 import { resolveProjectThreadCreationBranch } from "./projectThreadCreationValidation";
+import { setTicketDraft, ticketCreationField } from "../jira/ticketDrafts";
 
 type WorkspaceMode = "local" | "worktree";
 
@@ -934,6 +935,7 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
         },
       });
     }
+    setTicketDraft(draftKey, message.creation.ticket);
     setSelectedEnvironmentId(message.environmentId);
     setSelectedProjectKey(scopedProjectKey(message.environmentId, message.creation.projectId));
     activeEditingMessageId = message.messageId;
@@ -1011,6 +1013,7 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
         ...(mode === "worktree" && workspaceSelection?.pullRequestReference
           ? { pullRequestReference: workspaceSelection.pullRequestReference }
           : {}),
+        ...ticketCreationField(selectedProjectDraftKey),
         // An explicit picker choice wins. Otherwise only a task sending now
         // records the current checkout: a queued local task drains days
         // later against whatever is checked out then, so a queue-time

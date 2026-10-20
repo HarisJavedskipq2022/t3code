@@ -173,3 +173,51 @@ describe("new thread on an existing branch", () => {
     },
   );
 });
+
+describe("starting from a Jira ticket", () => {
+  const spec = {
+    projectId: ProjectId.make("project"),
+    projectCwd: "/workspace",
+    threadId: "ticket-thread",
+    commandId: "ticket-command",
+    messageId: "ticket-message",
+    createdAt: "2026-10-20T00:00:00Z",
+    text: "Fix SHP-4158: Print card stuck",
+    uploadedAttachments: [],
+    modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.6-sol" },
+    runtimeMode: "full-access",
+    interactionMode: "default",
+    workspaceMode: "worktree",
+    branch: "main",
+    worktreePath: null,
+    startFromOrigin: false,
+    worktreeBranchName: "t3code/1a2b3c4d",
+    ticket: {
+      ticket: {
+        provider: "jira",
+        key: "SHP-4158",
+        url: "https://team.atlassian.net/browse/SHP-4158",
+      },
+      branch: "fix/shp-4158-print-card-stuck",
+    },
+  } satisfies ProjectThreadStartTurnSpec;
+
+  it("links the ticket and names the new worktree's branch after it", () => {
+    const { bootstrap } = buildProjectThreadStartTurnInput(spec);
+    expect(bootstrap.createThread).toMatchObject({ linkedTicket: spec.ticket.ticket });
+    expect(bootstrap.prepareWorktree).toMatchObject({
+      baseBranch: "main",
+      branch: "fix/shp-4158-print-card-stuck",
+    });
+  });
+
+  it("still links the ticket when the task runs in the current checkout", () => {
+    const { bootstrap } = buildProjectThreadStartTurnInput({
+      ...spec,
+      workspaceMode: "local",
+      worktreePath: "/workspace",
+    });
+    expect(bootstrap.createThread).toMatchObject({ linkedTicket: spec.ticket.ticket });
+    expect(bootstrap).not.toHaveProperty("prepareWorktree");
+  });
+});

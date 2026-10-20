@@ -1,4 +1,5 @@
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { describeAgentStep } from "@t3tools/client-runtime/state/fusion-sidekick";
 import { isAtomCommandInterrupted } from "@t3tools/client-runtime/state/runtime";
 import type {
   EnvironmentId,
@@ -25,7 +26,6 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { useOrchestrationCommand } from "../../state/use-orchestration-command";
 import { worktreeServicesEnvironment } from "../../state/worktreeServices";
 import { buildThreadRouteParams } from "../../threadRoutes";
-import { describeAgentStep } from "./agentStep.logic";
 import { useFusionSidekickBanner } from "./fusionSidekickBanner";
 import { leadIsWaitingOnSidekick } from "./fusionSidekickBanner.logic";
 

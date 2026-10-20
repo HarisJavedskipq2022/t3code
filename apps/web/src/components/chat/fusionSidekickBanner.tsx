@@ -1,5 +1,10 @@
 import { useAtomValue } from "@effect/atom-react";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
+import {
+  fusionSidekickNeedsItems,
+  presentFusionSidekick,
+  resolveFusionSidekickActivity,
+} from "@t3tools/client-runtime/state/fusion-sidekick";
 import { resolveThreadWorkingStartedAt } from "@t3tools/client-runtime/state/models";
 import type { OrchestrationV2Subagent, ScopedThreadRef, ThreadId } from "@t3tools/contracts";
 import { Atom } from "effect/reactivity";
@@ -10,27 +15,11 @@ import { useThreadShell, useThreadVisibleTurnItems } from "~/state/entities";
 import { environmentThreadDetails } from "~/state/threads";
 import { Button } from "../ui/button";
 import type { ComposerBannerStackItem } from "./ComposerBannerStack";
-import { describeAgentStep } from "./agentStep.logic";
 import { WorkingTimer } from "./MessagesTimeline";
-import {
-  describeSidekickBlocker,
-  resolveFusionSidekickActivity,
-  runningSidekickCommandMinutes,
-  SIDEKICK_STALL_MINUTES,
-} from "./fusionSidekickBanner.logic";
 
 const NO_SIDEKICK_ATOM = Atom.make<OrchestrationV2Subagent | null>(null).pipe(
   Atom.withLabel("fusion-sidekick:none"),
 );
-
-const TITLES = {
-  working: "Sidekick is working",
-  approval: "Sidekick needs approval",
-  question: "Sidekick has a question",
-  finished: "Sidekick finished · lead is reviewing",
-  stopped: "Sidekick stopped",
-  stalled: "Sidekick may be stuck",
-} as const;
 
 /**
  * The composer banner for a Fusion lead's sidekick, or null while there is nothing to say.
@@ -69,29 +58,23 @@ export function useFusionSidekickBanner(input: {
   });
 
   const kind = activity?.kind ?? null;
-  const blocker = kind === "approval" || kind === "question" ? kind : null;
+  const blocked = kind === "approval" || kind === "question";
   // Only a working or blocked sidekick's thread is read, and only while the lead's thread is open.
-  const items = useThreadVisibleTurnItems(kind === "working" || blocker !== null ? childRef : null);
-  const step =
-    blocker === null ? describeAgentStep(items) : describeSidekickBlocker(items, blocker);
+  const items = useThreadVisibleTurnItems(fusionSidekickNeedsItems(activity) ? childRef : null);
   // A minute clock is enough to spot a hang without repainting every second.
   const nowMs = Date.parse(`${useNowMinute()}Z`);
-  const commandMinutes = kind === "working" ? runningSidekickCommandMinutes(items, nowMs) : null;
-  const stalled = commandMinutes !== null && commandMinutes >= SIDEKICK_STALL_MINUTES;
   const sidekickStartedAt =
     kind === "working" && child ? resolveThreadWorkingStartedAt(child) : null;
-  const title = activity?.title ?? null;
-  const reason = activity?.reason ?? null;
   const item = ((): ComposerBannerStackItem | null => {
-    if (kind === null || childThreadId === null) return null;
-    const elapsed = commandMinutes ? ` · ${commandMinutes}m` : "";
+    if (activity === null || childThreadId === null) return null;
+    const view = presentFusionSidekick({ activity, items, nowMs });
     return {
       id: `fusion-sidekick:${childThreadId}`,
-      variant: kind === "stopped" || blocker !== null || stalled ? "warning" : "info",
+      variant: view.warning ? "warning" : "info",
       priority: "activity",
       icon: <CombineIcon />,
-      title: TITLES[stalled ? "stalled" : kind],
-      description: reason ?? (step ? `${step}${elapsed}` : title),
+      title: view.title,
+      description: view.description,
       // The sidekick thread, one click away, has the full story.
       descriptionDetails: false,
       actions: (
@@ -101,17 +84,13 @@ export function useFusionSidekickBanner(input: {
               <WorkingTimer createdAt={sidekickStartedAt} />
             </span>
           ) : null}
-          {stalled ? (
+          {view.stalled ? (
             <Button size="xs" variant="ghost" onClick={() => onStopThread(childThreadId)}>
               Stop sidekick
             </Button>
           ) : null}
           <Button size="xs" variant="ghost" onClick={() => onOpenThread(childThreadId)}>
-            {blocker === "approval"
-              ? "Open approval"
-              : blocker === "question"
-                ? "Open question"
-                : "Open sidekick"}
+            {view.openLabel}
           </Button>
         </>
       ),
@@ -119,7 +98,7 @@ export function useFusionSidekickBanner(input: {
   })();
   return {
     item,
-    blockedThreadId: blocker === null ? null : childThreadId,
+    blockedThreadId: blocked ? childThreadId : null,
     sidekickThreadId: item === null ? null : childThreadId,
   };
 }

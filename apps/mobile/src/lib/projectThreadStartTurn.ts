@@ -13,6 +13,7 @@ import {
   deriveThreadTitleSeed,
   threadTitleTextFromPrompt,
 } from "@t3tools/client-runtime/operations";
+import type { TicketDraft } from "@t3tools/client-runtime/jira-ticket-draft";
 
 import type { UploadedMobileAttachment } from "./attachmentUpload";
 
@@ -35,6 +36,7 @@ export interface ProjectThreadStartTurnSpec {
   readonly worktreePath: string | null;
   readonly startFromOrigin: boolean;
   readonly worktreeBranchName: string;
+  readonly ticket?: TicketDraft;
 }
 
 export function buildProjectThreadStartTurnInput(spec: ProjectThreadStartTurnSpec) {
@@ -68,13 +70,14 @@ export function buildProjectThreadStartTurnInput(spec: ProjectThreadStartTurnSpe
         branch: spec.branch,
         worktreePath: isWorktree ? null : spec.worktreePath,
         createdAt: spec.createdAt,
+        ...(spec.ticket ? { linkedTicket: spec.ticket.ticket } : {}),
       },
       ...(isWorktree
         ? {
             prepareWorktree: {
               projectCwd: spec.projectCwd,
               baseBranch: spec.branch!,
-              branch: spec.worktreeBranchName,
+              branch: spec.ticket?.branch ?? spec.worktreeBranchName,
               ...(spec.startFromOrigin ? { startFromOrigin: true } : {}),
             },
             runSetupScript: true,

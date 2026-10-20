@@ -15,6 +15,7 @@ import {
   ProviderInteractionMode,
   RuntimeMode,
   ThreadId,
+  ThreadLinkedTicket,
   type ModelSelection as ModelSelectionType,
   type ProjectId as ProjectIdType,
   type ProviderInteractionMode as ProviderInteractionModeType,
@@ -25,6 +26,7 @@ import * as Schema from "effect/Schema";
 
 import { DraftComposerAttachmentSchema } from "../lib/composer-image-schema";
 import type { ComposerDispatchMode } from "@t3tools/client-runtime/state/composer-dispatch";
+import type { TicketDraft } from "@t3tools/client-runtime/jira-ticket-draft";
 import type { DraftComposerAttachment } from "../lib/composerImages";
 import { scopedThreadKey } from "../lib/scopedEntities";
 import { resolveProviderInteractionMode } from "./legacy-plan-mode";
@@ -42,6 +44,7 @@ const QueuedThreadCreationSchema = Schema.Struct({
   worktreePath: Schema.NullOr(Schema.String),
   startFromOrigin: Schema.optional(Schema.Boolean),
   pullRequestReference: Schema.optional(Schema.String),
+  ticket: Schema.optional(Schema.Struct({ ticket: ThreadLinkedTicket, branch: Schema.String })),
 });
 
 export const QueuedThreadMessageSchema = Schema.Struct({
@@ -73,6 +76,8 @@ export interface QueuedThreadCreation {
   readonly worktreePath: string | null;
   readonly startFromOrigin?: boolean;
   readonly pullRequestReference?: string;
+  /** Started from a Jira ticket: the thread links it, and a new worktree takes its branch. */
+  readonly ticket?: TicketDraft;
 }
 
 export interface QueuedThreadMessage {

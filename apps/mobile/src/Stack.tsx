@@ -93,6 +93,7 @@ import {
 } from "./features/threads/ThreadSettingsSheet";
 import { NewTaskFlowProvider } from "./features/threads/new-task-flow-provider";
 import { NewTaskRouteScreen } from "./features/threads/NewTaskRouteScreen";
+import { StartFromTicketRouteScreen } from "./features/jira/StartFromTicketScreen";
 import { SettingsAppearanceRouteScreen } from "./features/settings/SettingsAppearanceRouteScreen";
 import { SettingsClientStorageRouteScreen } from "./features/settings/SettingsClientStorageRouteScreen";
 import { SettingsDiagnosticsRouteScreen } from "./features/diagnostics/SettingsDiagnosticsRouteScreen";
@@ -491,6 +492,13 @@ const NewTaskSheetStack = createNativeStackNavigator({
       linking: "draft/branch",
       options: {
         title: "Branch",
+      },
+    }),
+    NewTaskJira: createNativeStackScreen({
+      screen: StartFromTicketRouteScreen,
+      linking: "draft/jira",
+      options: {
+        title: "Jira ticket",
       },
     }),
     NewTaskFile: createNativeStackScreen({
