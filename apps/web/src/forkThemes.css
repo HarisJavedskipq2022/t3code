@@ -134,6 +134,87 @@
     --fork-art-c: #7fbfa9;
   }
 
+  html[data-theme-id="fork-absolutely"] {
+    --fork-art-a: #cc7d5e;
+    --fork-art-b: #00c853;
+    --fork-art-c: #ff5f38;
+  }
+  html[data-theme-id="fork-codex"] {
+    --fork-art-a: #0169cc;
+    --fork-art-b: #751ed9;
+    --fork-art-c: #008809;
+  }
+  html[data-theme-id="fork-linear"] {
+    --fork-art-a: #5e6ad2;
+    --fork-art-b: #8160d8;
+    --fork-art-c: #0f8f83;
+  }
+  html[data-theme-id="fork-lobster"] {
+    --fork-art-a: #ff5c5c;
+    --fork-art-b: #14b8a6;
+    --fork-art-c: #22c55e;
+  }
+  html[data-theme-id="fork-material"] {
+    --fork-art-a: #80cbc4;
+    --fork-art-b: #9c3eda;
+    --fork-art-c: #91b859;
+  }
+  html[data-theme-id="fork-matrix"] {
+    --fork-art-a: #1eff5a;
+    --fork-art-b: #3f8f52;
+    --fork-art-c: #7dff95;
+  }
+  html[data-theme-id="fork-notion"] {
+    --fork-art-a: #3183d8;
+    --fork-art-b: #9065b0;
+    --fork-art-c: #008000;
+  }
+  html[data-theme-id="fork-og"] {
+    --fork-art-a: #10a37f;
+    --fork-art-b: #b4a1e5;
+    --fork-art-c: #65c99a;
+  }
+  html[data-theme-id="fork-oscurange"] {
+    --fork-art-a: #f9b98c;
+    --fork-art-b: #479ffa;
+    --fork-art-c: #ffa16c;
+  }
+  html[data-theme-id="fork-proof"] {
+    --fork-art-a: #3d755d;
+    --fork-art-b: #5f6ac2;
+    --fork-art-c: #d3b45b;
+  }
+  html[data-theme-id="fork-raycast"] {
+    --fork-art-a: #ff6363;
+    --fork-art-b: #9a1b6e;
+    --fork-art-c: #006b4f;
+  }
+  html[data-theme-id="fork-sentry"] {
+    --fork-art-a: #7055f6;
+    --fork-art-b: #c39bff;
+    --fork-art-c: #8ee6d7;
+  }
+  html[data-theme-id="fork-temple"] {
+    --fork-art-a: #e4f222;
+    --fork-art-b: #859419;
+    --fork-art-c: #c7e6da;
+  }
+  html[data-theme-id="fork-vercel"] {
+    --fork-art-a: #006aff;
+    --fork-art-b: #a100f8;
+    --fork-art-c: #28a948;
+  }
+  html[data-theme-id="fork-vscode-plus"] {
+    --fork-art-a: #007acc;
+    --fork-art-b: #af00db;
+    --fork-art-c: #008000;
+  }
+  html[data-theme-id="fork-xcode"] {
+    --fork-art-a: #0e0eff;
+    --fork-art-b: #9b2393;
+    --fork-art-c: #326d74;
+  }
+
   html[data-theme-id^="fork-"] {
     --stage-art-top: oklch(from var(--fork-art-a) 0.76 min(c, 0.15) h);
     --stage-art-mid: oklch(from var(--fork-art-a) 0.58 min(c, 0.17) h);
