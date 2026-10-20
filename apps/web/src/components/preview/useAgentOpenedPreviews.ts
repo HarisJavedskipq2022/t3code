@@ -9,6 +9,7 @@ import {
 } from "../../previewMiniPlayerStore";
 import type { ThreadPreviewState } from "../../previewStateStore";
 import { useRightPanelStore, type RightPanelSurface } from "../../rightPanelStore";
+import { agentBrowserRevealTarget } from "./agentBrowserReveal";
 
 const selectAutoShowFloatingPreview = (settings: { browserAutoShowFloatingPreview: boolean }) =>
   settings.browserAutoShowFloatingPreview;
@@ -117,13 +118,20 @@ export function useAgentOpenedPreviews(input: {
         ? previous.get(session.tabId) !== requested.id
         : !previous.has(session.tabId);
       if (!fresh || session.reveal !== true) continue;
-      if (!autoShowFloatingPreview && requested?.force !== true) continue;
       const surface = panelSurfaces.find(
         (surface) => surface.kind === "preview" && surface.resourceId === session.tabId,
       );
-      if (surface && requested?.force === true) {
+      const target = agentBrowserRevealTarget({
+        inPanel: surface !== undefined,
+        forced: requested?.force === true,
+        autoShowFloatingPreview,
+        sheetLayout,
+      });
+      if (target === "activate" && surface) {
         useRightPanelStore.getState().activateSurface(threadRef, surface.id);
-      } else if (!surface) {
+      } else if (target === "panel") {
+        useRightPanelStore.getState().openBrowser(threadRef, session.tabId);
+      } else if (target === "floating") {
         usePreviewMiniPlayerStore
           .getState()
           .open(threadRef, browserMiniPlayerSource(session.tabId));
@@ -136,6 +144,7 @@ export function useAgentOpenedPreviews(input: {
     threadRef,
     autoShowFloatingPreview,
     panelSurfaces,
+    sheetLayout,
   ]);
   // A floating device follows its session: once the agent or another client
   // closes the device there is nothing left to stream.
