@@ -102,22 +102,22 @@ function Services(props: Props) {
     setBusy(true);
     setError(null);
     const base = query.data;
-    try {
-      const next = await control({
-        environmentId: props.environmentId,
-        input: { threadId: props.threadId, action, ...(scriptId ? { scriptId } : {}) },
-      });
-      if (!mounted.current) return;
-      if (next._tag === "Success") {
-        setResult({ base, value: next.value });
-        query.refresh();
-      } else if (!isAtomCommandInterrupted(next)) {
-        const failure = squashAtomCommandFailure(next);
-        setError(failure instanceof Error ? failure.message : "Could not control app services.");
-      }
-    } finally {
-      inFlight.current = false;
-      if (mounted.current) setBusy(false);
+    // `.catch` instead of try/finally, which React Compiler can't compile.
+    const next = await control({
+      environmentId: props.environmentId,
+      input: { threadId: props.threadId, action, ...(scriptId ? { scriptId } : {}) },
+    }).catch(() => null);
+    inFlight.current = false;
+    if (!mounted.current) return;
+    setBusy(false);
+    if (next === null) {
+      setError("Could not control app services.");
+    } else if (next._tag === "Success") {
+      setResult({ base, value: next.value });
+      query.refresh();
+    } else if (!isAtomCommandInterrupted(next)) {
+      const failure = squashAtomCommandFailure(next);
+      setError(failure instanceof Error ? failure.message : "Could not control app services.");
     }
   };
   if (query.isSuccess && rows.length === 0 && !query.error) return null;

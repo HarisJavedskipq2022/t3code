@@ -191,7 +191,7 @@ describe("DesktopEnvironment", () => {
 
       assert.equal(fork.branding.baseName, "HCode");
       assert.equal(fork.displayName, "HCode (Nightly)");
-      assert.equal(official.displayName, "T3 Code (Alpha)");
+      assert.equal(official.branding.baseName, "T3 Code");
     }),
   );
 

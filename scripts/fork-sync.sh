@@ -146,6 +146,30 @@ typecheck_all() {
   done
 }
 
+# Tests run from their package so its own projects apply (web's browser tests,
+# mobile's react tests); packages without a config run under the root one.
+test_dir() {
+  local pkg
+  pkg="$(echo "$1" | cut -d/ -f1-2)"
+  if [ -f "$REPO/$pkg/vite.config.ts" ]; then echo "$pkg"; else echo .; fi
+}
+
+# Every test the fork adds or changes, computed so new fork tests are never
+# left out. The rest of the nightly's suite is upstream CI's job.
+fork_tests() {
+  local files dir f
+  files="$(git diff --name-only --diff-filter=AM "$TAG" HEAD -- '*.test.ts' '*.test.tsx')"
+  [ -n "$files" ] || return 0
+  for dir in $(printf '%s\n' "$files" | while read -r f; do test_dir "$f"; done | sort -u); do
+    set --
+    while read -r f; do
+      if [ "$(test_dir "$f")" = "$dir" ]; then set -- "$@" "${f#"$dir"/}"; fi
+    done <<<"$files"
+    echo "fork tests in $dir ($# files)"
+    (cd "$REPO/$dir" && vp test run "$@") || return 1
+  done
+}
+
 FORCE=0
 for arg in "$@"; do
   case "$arg" in
@@ -189,9 +213,7 @@ stop() {
 
 vp i >/dev/null || stop "dependency install failed"
 typecheck_all || stop "typecheck failed on $TAG"
-vp test run scripts/build-desktop-artifact.test.ts apps/desktop/src/app/DesktopUserData.test.ts \
-  apps/server/src/vet/VetService.test.ts \
-  || stop "fork patch tests failed on $TAG"
+fork_tests || stop "fork patch tests failed on $TAG"
 
 # The build reuses the native monitor shipped in an installed T3 Code app instead of needing Rust.
 if [ ! -x "$MONITOR" ]; then

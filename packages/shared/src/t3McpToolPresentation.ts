@@ -43,6 +43,8 @@ export type T3McpToolSummaryAction =
   | "worktree-handoff"
   | "worktree-list"
   | "worktree-status"
+  | "worktree-services"
+  | "worktree-service-control"
   | "vet-run"
   | "vet-findings"
   | "vet-update"
@@ -166,6 +168,14 @@ const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
     "worktree-handoff",
   ),
   t3_worktree_status: tool(["Get", "Getting", "Got", "thread worktree status"], "worktree-status"),
+  t3_worktree_services: tool(
+    ["List", "Listing", "Listed", "worktree services"],
+    "worktree-services",
+  ),
+  t3_worktree_service_control: tool(
+    ["Control", "Controlling", "Controlled", "worktree services"],
+    "worktree-service-control",
+  ),
   preview_status: tool(["Get", "Getting", "Got", "preview browser status"], "browser", "browser"),
   preview_open: tool(
     ["Open", "Opening", "Opened", "a page in the preview browser"],

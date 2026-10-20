@@ -305,6 +305,12 @@ export function summarizeT3ToolCalls(
     case "worktree-status":
       label = phrase("Checked", "check", `worktree status ${times}`);
       break;
+    case "worktree-services":
+      label = phrase("Listed", "list", `worktree services ${times}`);
+      break;
+    case "worktree-service-control":
+      label = phrase("Controlled", "control", `worktree services ${times}`);
+      break;
     case "vet-run":
       label = phrase("Started", "start", quantity(selected.length, "vet review"));
       break;
