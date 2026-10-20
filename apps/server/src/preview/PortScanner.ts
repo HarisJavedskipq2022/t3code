@@ -827,8 +827,8 @@ export const make = Effect.gen(function* PortDiscoveryMake() {
     configuredUrls: ReadonlyArray<string>,
   ) {
     const terminalByProcessId = yield* readTerminalProcessOwners();
-    // netstat and tasklist are slow on Windows; a scan with nothing to look for spawns neither.
-    if (hostPlatform === "win32" && terminalByProcessId.size === 0 && configuredUrls.length === 0) {
+    // A scan with nothing to look for spawns no process probe on any platform.
+    if (terminalByProcessId.size === 0 && configuredUrls.length === 0) {
       return { discovered: [], configured: new Map() } satisfies WebProbeSnapshot;
     }
     const raw = yield* discoverRawListeners(terminalByProcessId);

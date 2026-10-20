@@ -152,6 +152,7 @@ import { useClientSettings } from "../hooks/useSettings";
 import { useCopyToClipboard } from "../hooks/useCopyToClipboard";
 import { useLocalStorage } from "../hooks/useLocalStorage";
 import { useNowMinute } from "../hooks/useNowMinute";
+import { useNowSecond } from "../hooks/useNowSecond";
 import {
   useEnvironmentIdentities,
   useConnectedEnvironmentIds,
@@ -231,6 +232,7 @@ import {
   type SidebarListItem,
   type SidebarListMarker,
   type SidebarSection,
+  resolveSidebarRowThreadId,
 } from "./Sidebar.logic";
 import { resolveLocalCheckoutBranchMismatch } from "./BranchToolbar.logic";
 import {
@@ -314,6 +316,7 @@ type SidebarProviderEntry = Pick<
   ProviderInstanceEntry,
   | "instanceId"
   | "driverKind"
+  | "enabled"
   | "displayName"
   | "accentColor"
   | "acpRegistryAgentId"
@@ -331,6 +334,7 @@ function sameSidebarProviderEntries(
     if (
       other === undefined ||
       other.driverKind !== entry.driverKind ||
+      other.enabled !== entry.enabled ||
       other.displayName !== entry.displayName ||
       other.accentColor !== entry.accentColor ||
       other.acpRegistryAgentId !== entry.acpRegistryAgentId ||
@@ -462,7 +466,7 @@ function useSidebarThreads(input: {
   readonly scopedProjectKeys: ReadonlySet<string> | null;
   readonly serverConfigs: ReadonlyMap<EnvironmentId, EnvironmentServerConfig>;
   readonly optimisticDrop: SidebarOptimisticDrop | null;
-  readonly routeThreadKey: string | null;
+  readonly routeThreadRef: ScopedThreadRef | null;
   readonly projectGroupKeys: ReadonlyMap<string, string> | null;
 }) {
   const {
@@ -470,10 +474,23 @@ function useSidebarThreads(input: {
     scopedProjectKeys,
     serverConfigs,
     optimisticDrop,
-    routeThreadKey,
+    routeThreadRef,
     projectGroupKeys,
   } = input;
   const threads = useThreadShells();
+  const routeRowThreadKey =
+    routeThreadRef === null
+      ? null
+      : scopedThreadKey(
+          scopeThreadRef(
+            routeThreadRef.environmentId,
+            resolveSidebarRowThreadId(
+              routeThreadRef.threadId,
+              routeThreadRef.environmentId,
+              threads,
+            ),
+          ),
+        );
   const workingShelfEnabled = useClientSettings((s) => s.sidebarWorkingShelfEnabled);
   const nowMinute = useNowMinute();
   // Snooze wake times are second-precise, so classifying with the quantized
@@ -529,10 +546,10 @@ function useSidebarThreads(input: {
   const visibleSettledThreads = (() => {
     if (settledThreads.length <= settledVisibleCount) return settledThreads;
     const visible = settledThreads.slice(0, settledVisibleCount);
-    if (routeThreadKey !== null) {
+    if (routeRowThreadKey !== null) {
       const routeThread = settledThreads
         .slice(settledVisibleCount)
-        .find((thread) => threadShellKey(thread) === routeThreadKey);
+        .find((thread) => threadShellKey(thread) === routeRowThreadKey);
       if (routeThread !== undefined) visible.push(routeThread);
     }
     return visible;
@@ -543,7 +560,7 @@ function useSidebarThreads(input: {
       threads: list,
       groupKeys: projectGroupKeys,
       collapsedGroups,
-      keep: (thread) => threadShellKey(thread) === routeThreadKey || threadNeedsUser(thread),
+      keep: (thread) => threadShellKey(thread) === routeRowThreadKey || threadNeedsUser(thread),
     });
   const activeFold = foldGroups("active", activeThreads);
   const settledFold = foldGroups(
@@ -551,17 +568,17 @@ function useSidebarThreads(input: {
     groupThreadsByProject(
       settledShelfExpanded
         ? visibleSettledThreads
-        : routeThreadOnly(visibleSettledThreads, routeThreadKey),
+        : routeThreadOnly(visibleSettledThreads, routeRowThreadKey),
       projectGroupKeys,
     ),
   );
   const snoozedFold = foldGroups(
     "snoozed",
-    snoozedShelfExpanded ? snoozedThreads : routeThreadOnly(snoozedThreads, routeThreadKey),
+    snoozedShelfExpanded ? snoozedThreads : routeThreadOnly(snoozedThreads, routeRowThreadKey),
   );
   const workingFold = foldGroups(
     "working",
-    workingShelfExpanded ? workingThreads : routeThreadOnly(workingThreads, routeThreadKey),
+    workingShelfExpanded ? workingThreads : routeThreadOnly(workingThreads, routeRowThreadKey),
   );
   const projectGroupHeaders = {
     active: activeFold.headers,
@@ -590,6 +607,7 @@ function useSidebarThreads(input: {
     for (const thread of list) sectionByThreadKey.set(threadShellKey(thread), section);
   }
   return {
+    routeRowThreadKey,
     ...partition,
     activeThreads,
     workingThreads,
@@ -907,18 +925,19 @@ function JumpHintBadge(props: { label: string }) {
   );
 }
 
-// Self-ticking so only this span re-renders each second, not the whole row.
 function WorkingDuration(props: { startedAt: string | null }) {
   const startedMs = props.startedAt !== null ? Date.parse(props.startedAt) : Number.NaN;
-  // Mount time is close enough for the first frame; the interval keeps it current.
-  const [nowMs, setNowMs] = useState(() => Date.now());
-  useEffect(() => {
-    if (Number.isNaN(startedMs)) return;
-    const id = window.setInterval(() => setNowMs(Date.now()), 1_000);
-    return () => window.clearInterval(id);
-  }, [startedMs]);
   if (Number.isNaN(startedMs)) return null;
-  return <span className="tabular-nums">{formatWorkingDurationLabel(nowMs - startedMs)}</span>;
+  return <WorkingDurationLabel startedMs={startedMs} />;
+}
+
+// Self-ticking so only this span re-renders each second, not the whole row;
+// the shared tick lands every working row's update in the same frame.
+function WorkingDurationLabel(props: { startedMs: number }) {
+  const nowMs = useNowSecond();
+  return (
+    <span className="tabular-nums">{formatWorkingDurationLabel(nowMs - props.startedMs)}</span>
+  );
 }
 
 function terminalProcessLabel(count: number): string {
@@ -945,8 +964,8 @@ function SidebarProviderStack(props: {
       acpRegistryAgentId={currentEntry.acpRegistryAgentId}
       acpRegistryIconUrl={currentEntry.acpRegistryIconUrl}
       showBadge={showInstanceBadge}
-      iconClassName="size-3.5 opacity-60"
-      badgeClassName="right-[-0.1875rem] bottom-[-0.1875rem] h-3 min-w-3 px-0.5 text-5xs"
+      size="compact"
+      iconClassName="opacity-60"
     />
   );
   if (stack.length === 1) {
@@ -1046,7 +1065,7 @@ function SidebarThreadTooltip({
         {branchMismatch ? (
           <div className="flex min-w-0 items-start gap-2 text-warning">
             <CircleAlertIcon aria-hidden className="mt-0.5 size-3 shrink-0 stroke-current" />
-            <div className="min-w-0 flex-1 wrap-break-word leading-5">
+            <div className="min-w-0 flex-1 wrap-break-word">
               You're currently checked out on another branch.
             </div>
           </div>
@@ -1599,6 +1618,9 @@ type SidebarThreadRowProps = {
   snoozeWakeLabelText: string | null;
   wokeAt: string | null;
   isActive: boolean;
+  // Unlike isActive, never true for the ancestor standing in for an open
+  // subagent: drafts and PR clicks care about which composer is on screen.
+  isRouteThread: boolean;
   openPullRequestsInRightPanel: boolean;
   jumpLabel: string | null;
   currentEnvironmentId: string | null;
@@ -1674,7 +1696,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
   });
   const terminalStatus = terminalStatusFromRunningIds(runningTerminalIds);
   const terminalProcessCount = runningTerminalIds.length;
-  const hasUnsentDraft = useThreadHasUnsentDraft(threadRef) && !props.isActive;
+  const hasUnsentDraft = useThreadHasUnsentDraft(threadRef) && !props.isRouteThread;
   const handleDiscardDraftClick = (event: ReactMouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
@@ -1952,7 +1974,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     if (!url) return;
     const showInRightPanel = targetUrl !== undefined || openPullRequestsInRightPanel;
     const openedInRightPanel = openPrLink(event, url, showInRightPanel ? threadRef : undefined);
-    if (openedInRightPanel && showInRightPanel && !props.isActive) {
+    if (openedInRightPanel && showInRightPanel && !props.isRouteThread) {
       onThreadActivate(threadRef);
     }
   };
@@ -2070,7 +2092,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     : null;
   const handlePrListClick = () => {
     useRightPanelStore.getState().open(threadRef, "pull-requests");
-    if (!props.isActive) onThreadActivate(threadRef);
+    if (!props.isRouteThread) onThreadActivate(threadRef);
   };
   const prBadge =
     prBadgeShape?.kind === "stack" || pr || currentLinkedPr ? (
@@ -3077,12 +3099,13 @@ export default function Sidebar() {
     activeKeys,
     pinnedKeysById,
     activeKeysById,
+    routeRowThreadKey,
   } = useSidebarThreads({
     projectScopeKey,
     scopedProjectKeys,
     serverConfigs,
     optimisticDrop,
-    routeThreadKey,
+    routeThreadRef,
     projectGroupKeys,
   });
 
@@ -3735,7 +3758,7 @@ export default function Sidebar() {
     ...(draggedActiveOrder === undefined ? {} : { activeOrder: draggedActiveOrder }),
     settledExpanded: settledShelfExpanded,
     settledVisibleCount,
-    routeThreadKey,
+    routeThreadKey: routeRowThreadKey,
     snoozedThreadCount: snoozedThreads.length,
     groupByProject: projectGroupKeys !== null,
   });
@@ -4589,7 +4612,7 @@ export default function Sidebar() {
         navigateToThreadKey(
           resolveAdjacentThreadId({
             threadIds: orderedThreadKeys,
-            currentThreadId: routeThreadKey,
+            currentThreadId: routeRowThreadKey,
             direction: traversalDirection,
           }),
         );
@@ -4605,8 +4628,8 @@ export default function Sidebar() {
     keybindings,
     navigateToThread,
     orderedThreadKeys,
+    routeRowThreadKey,
     routeTerminalOpen,
-    routeThreadKey,
     threadByKey,
   ]);
 
@@ -4844,7 +4867,7 @@ export default function Sidebar() {
                           EMPTY_PROVIDER_ENTRIES
                         }
                         isHighlighted={activeSearchResultIndex === index}
-                        isRouteActive={routeThreadKey === threadKey}
+                        isRouteActive={routeRowThreadKey === threadKey}
                         resultId={`sidebar-thread-search-result-${index}`}
                         searchMatch={
                           threadSearchMatchByKey.get(
@@ -4966,7 +4989,8 @@ export default function Sidebar() {
                                 : null
                             }
                             wokeAt={threadWokeAt(thread, { now: snoozeNow })}
-                            isActive={routeThreadKey === threadKey}
+                            isActive={routeRowThreadKey === threadKey}
+                            isRouteThread={routeThreadKey === threadKey}
                             openPullRequestsInRightPanel={routeThreadRef !== null}
                             jumpLabel={
                               showJumpHints ? (jumpLabelByKey.get(threadKey) ?? null) : null

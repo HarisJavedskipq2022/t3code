@@ -27,7 +27,7 @@ export function useVetDiffReveal(
   };
 }
 
-/** Called after the panel's own file scroll so the line scroll lands last. */
+/** The panel skips its own file scroll for a line reveal, so this one scrolls to the line. */
 export function useVetLineScroll(
   codeView: AnnotatableCodeViewHandle | null,
   codeViewMountKey: string,

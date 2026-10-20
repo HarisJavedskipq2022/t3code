@@ -164,6 +164,21 @@ export const OrchestrationV2ContextTransferResolution = Schema.Union([
 export type OrchestrationV2ContextTransferResolution =
   typeof OrchestrationV2ContextTransferResolution.Type;
 
+export const OrchestrationV2ProviderTurnTokenUsage = Schema.Struct({
+  usedTokens: NonNegativeInt,
+  maxTokens: Schema.optional(Schema.NullOr(NonNegativeInt)),
+  inputTokens: Schema.optional(NonNegativeInt),
+  cachedInputTokens: Schema.optional(NonNegativeInt),
+  outputTokens: Schema.optional(NonNegativeInt),
+  reasoningOutputTokens: Schema.optional(NonNegativeInt),
+  promptCacheTtlMs: Schema.optional(PositiveInt),
+  autoCompactThreshold: Schema.optional(PositiveInt),
+  promptCacheExpiresAt: Schema.optional(Schema.String),
+  updatedAt: Schema.String,
+});
+export type OrchestrationV2ProviderTurnTokenUsage =
+  typeof OrchestrationV2ProviderTurnTokenUsage.Type;
+
 export const OrchestrationV2ContextTransfer = Schema.Struct({
   id: ContextTransferId,
   type: OrchestrationV2ContextTransferType,
@@ -172,6 +187,7 @@ export const OrchestrationV2ContextTransfer = Schema.Struct({
   sourcePoint: OrchestrationV2ContextSourcePoint,
   basePoint: Schema.NullOr(OrchestrationV2ContextSourcePoint),
   sourceProviderInstanceId: Schema.NullOr(ProviderInstanceId),
+  sourceTokenUsage: Schema.optional(OrchestrationV2ProviderTurnTokenUsage),
   targetProviderInstanceId: Schema.NullOr(ProviderInstanceId),
   targetRunId: Schema.NullOr(RunId),
   status: Schema.Literals([
@@ -668,6 +684,7 @@ export const OrchestrationV2WorkflowAgent = Schema.Struct({
   durationMs: Schema.optional(NonNegativeInt),
   queuedAt: Schema.optional(NonNegativeInt),
   startedAt: Schema.optional(NonNegativeInt),
+  completedAt: Schema.optional(NonNegativeInt),
   prompt: Schema.optional(Schema.NonEmptyString),
   result: Schema.optional(Schema.NonEmptyString),
 });
@@ -844,6 +861,7 @@ export const OrchestrationV2ProviderThreadNativeMetadata = Schema.Struct({
   title: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   updatedAt: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   itemIdentityVersion: Schema.optional(Schema.Literal(2)),
+  forkHeadMessageId: Schema.optional(TrimmedNonEmptyString),
 });
 export type OrchestrationV2ProviderThreadNativeMetadata =
   typeof OrchestrationV2ProviderThreadNativeMetadata.Type;
@@ -962,19 +980,6 @@ export const OrchestrationV2ContextHandoff = Schema.Struct({
   updatedAt: Schema.DateTimeUtc,
 });
 export type OrchestrationV2ContextHandoff = typeof OrchestrationV2ContextHandoff.Type;
-
-export const OrchestrationV2ProviderTurnTokenUsage = Schema.Struct({
-  usedTokens: NonNegativeInt,
-  maxTokens: Schema.optional(Schema.NullOr(NonNegativeInt)),
-  inputTokens: Schema.optional(NonNegativeInt),
-  cachedInputTokens: Schema.optional(NonNegativeInt),
-  outputTokens: Schema.optional(NonNegativeInt),
-  reasoningOutputTokens: Schema.optional(NonNegativeInt),
-  promptCacheTtlMs: Schema.optional(PositiveInt),
-  updatedAt: Schema.String,
-});
-export type OrchestrationV2ProviderTurnTokenUsage =
-  typeof OrchestrationV2ProviderTurnTokenUsage.Type;
 
 export const OrchestrationV2ProviderTurn = Schema.Struct({
   id: ProviderTurnId,
@@ -1100,6 +1105,11 @@ export const OrchestrationV2ConversationMessage = Schema.Struct({
   ...OrchestrationV2CreationFields,
   scheduledTaskId: Schema.optional(ScheduledTaskId),
   senderThreadId: Schema.optional(ThreadId),
+  /**
+   * The message is the script a provider-native workflow run executes, not prose. Clients show
+   * the workflow's opening instead and keep the script behind a disclosure.
+   */
+  workflowScript: Schema.optional(Schema.Boolean),
   id: MessageId,
   threadId: ThreadId,
   runId: Schema.NullOr(RunId),
@@ -1139,6 +1149,7 @@ export const OrchestrationV2UserInputQuestion = Schema.Struct({
       label: TrimmedNonEmptyString,
       description: TrimmedNonEmptyString,
       value: Schema.optional(Schema.String),
+      preview: Schema.optional(Schema.String),
     }),
   ),
   multiSelect: Schema.optional(Schema.Boolean),
@@ -1350,6 +1361,7 @@ export const OrchestrationV2TurnItem = Schema.Union([
     messageId: MessageId,
     scheduledTaskId: Schema.optional(ScheduledTaskId),
     senderThreadId: Schema.optional(ThreadId),
+    workflowScript: OrchestrationV2ConversationMessage.fields.workflowScript,
     inputIntent: OrchestrationV2UserMessageInputIntent,
     text: Schema.String,
     context: Schema.optional(OrchestrationMessageContext),
@@ -1790,6 +1802,8 @@ export const OrchestrationV2PendingRuntimeRequestSummary = Schema.Struct({
   id: RuntimeRequestId,
   kind: OrchestrationV2RuntimeRequest.fields.kind,
   createdAt: Schema.DateTimeUtc,
+  /** False for async questions the run keeps working past. Absent from older servers. */
+  blocking: Schema.optional(Schema.Boolean),
 });
 export type OrchestrationV2PendingRuntimeRequestSummary =
   typeof OrchestrationV2PendingRuntimeRequestSummary.Type;
@@ -1833,6 +1847,7 @@ export const OrchestrationV2ThreadShell = Schema.Struct({
   activityRunStatus: Schema.optional(
     Schema.NullOr(Schema.Literals(["preparing", "starting", "running", "waiting"])),
   ),
+  blockedOnThreadWait: Schema.optional(Schema.Boolean),
   status: OrchestrationV2ShellThreadStatus,
   lastError: Schema.optional(Schema.NullOr(Schema.String)),
   lastErrorClass: Schema.optional(Schema.NullOr(OrchestrationV2ProviderFailureClass)),
@@ -2109,6 +2124,7 @@ export const OrchestrationV2TurnItemJson = Schema.Union([
     messageId: MessageId,
     scheduledTaskId: Schema.optional(ScheduledTaskId),
     senderThreadId: Schema.optional(ThreadId),
+    workflowScript: OrchestrationV2ConversationMessage.fields.workflowScript,
     inputIntent: OrchestrationV2UserMessageInputIntent,
     text: Schema.String,
     context: Schema.optional(OrchestrationMessageContext),
@@ -2563,6 +2579,12 @@ export type OrchestrationV2StoredEventJson = typeof OrchestrationV2StoredEventJs
 
 export const OrchestrationV2Command = Schema.Union([
   Schema.Struct({
+    type: Schema.Literal("thread.stop"),
+    commandId: CommandId,
+    threadId: ThreadId,
+    reason: Schema.optional(Schema.String),
+  }),
+  Schema.Struct({
     type: Schema.Literal("thread.create"),
     ...OrchestrationV2CreationFields,
     commandId: CommandId,
@@ -2702,6 +2724,7 @@ export const OrchestrationV2Command = Schema.Union([
     ...ThreadPullRequestKey.fields,
     url: TrimmedNonEmptyString,
     source: ThreadPullRequestLinkSource,
+    repositoryWebUrl: Schema.optional(TrimmedNonEmptyString),
   }),
   Schema.Struct({
     type: Schema.Literal("thread.pull-request.unlink"),
@@ -2724,7 +2747,11 @@ export const OrchestrationV2Command = Schema.Union([
     ...ThreadPullRequestKey.fields,
     watching: Schema.Boolean,
     link: Schema.optional(
-      Schema.Struct({ url: TrimmedNonEmptyString, source: ThreadPullRequestLinkSource }),
+      Schema.Struct({
+        url: TrimmedNonEmptyString,
+        source: ThreadPullRequestLinkSource,
+        repositoryWebUrl: Schema.optional(TrimmedNonEmptyString),
+      }),
     ),
   }),
   Schema.Struct({
@@ -3010,6 +3037,8 @@ const OrchestrationV2InternalCommand = Schema.Union([
     ...ThreadPullRequestKey.fields,
     startedAt: IsoDateTime,
     watch: Schema.NullOr(ThreadPullRequestWatch),
+    /** With `watch: null`, the state the ended watch keeps instead of its last saved one. */
+    endedWatch: Schema.optional(ThreadPullRequestWatch),
     wake: Schema.optional(
       Schema.Struct({
         messageId: MessageId,
@@ -3042,12 +3071,6 @@ const OrchestrationV2InternalCommand = Schema.Union([
         }),
       }),
     ),
-  }),
-  Schema.Struct({
-    type: Schema.Literal("thread.stop"),
-    commandId: CommandId,
-    threadId: ThreadId,
-    reason: Schema.optional(Schema.String),
   }),
   /**
    * Internal so no client can mark a request saved without the value being
