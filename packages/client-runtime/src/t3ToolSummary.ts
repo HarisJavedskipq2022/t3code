@@ -320,6 +320,29 @@ export function summarizeT3ToolCalls(
     case "vet-update":
       label = phrase("Recorded", "record", quantity(selected.length, "vet verdict"));
       break;
+    case "jira-read":
+      label = phrase("Read", "read", quantity(countEntities(entityIds("key")), "Jira ticket"));
+      break;
+    case "jira-search":
+      label = phrase("Searched", "search", `Jira tickets ${times}`);
+      break;
+    case "jira-transitions":
+      label = phrase(
+        "Listed",
+        "list",
+        `transitions for ${quantity(countEntities(entityIds("key")), "Jira ticket")}`,
+      );
+      break;
+    case "jira-comment":
+      label = phrase(
+        "Commented on",
+        "comment on",
+        quantity(countEntities(entityIds("key")), "Jira ticket"),
+      );
+      break;
+    case "jira-transition":
+      label = phrase("Moved", "move", quantity(countEntities(entityIds("key")), "Jira ticket"));
+      break;
     case "project-list":
       label = phrase("Listed", "list", `projects ${times}`);
       break;

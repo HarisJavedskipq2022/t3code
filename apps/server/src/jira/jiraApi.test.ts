@@ -84,10 +84,14 @@ describe("Jira API", () => {
 
   it.effect("searches text with escaped JQL", () =>
     Effect.gen(function* () {
-      const test = fixture(() => ({ status: 200, body: { issues: [issue("SHP-1")] } }));
+      const test = fixture(() => ({
+        status: 200,
+        body: { issues: [issue("SHP-1", { assignee: null })] },
+      }));
       const api = yield* test.api;
       const found = yield* api.searchIssues(credentials, 'label "stuck"');
       expect(found.map((summary) => summary.key)).toEqual(["SHP-1"]);
+      expect(found[0]).not.toHaveProperty("assignee");
       expect(test.requests[0]).toMatchObject({
         method: "POST",
         path: "/rest/api/3/search/jql",

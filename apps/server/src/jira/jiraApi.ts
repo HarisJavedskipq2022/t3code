@@ -9,7 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 
-import { jiraCommentDocument, jiraDocumentToText } from "./jiraDocument.ts";
+import { jiraCommentDocument, jiraDocumentToText, jiraTextDocument } from "./jiraDocument.ts";
 
 export interface JiraCredentials {
   readonly siteUrl: string;
@@ -20,6 +20,8 @@ export interface JiraCredentials {
 const REQUEST_TIMEOUT = "20 seconds";
 const SEARCH_LIMIT = 25;
 const ISSUE_KEY = /^[A-Z][A-Z0-9_]+-\d+$/;
+const SUMMARY_FIELDS = ["summary", "status", "issuetype", "assignee"];
+const ERROR_DETAIL_LIMIT = 500;
 
 const OptionalName = Schema.optional(Schema.Struct({ name: Schema.optional(Schema.String) }));
 
@@ -32,6 +34,9 @@ const IssueFields = Schema.Struct({
     }),
   ),
   issuetype: OptionalName,
+  assignee: Schema.optional(
+    Schema.NullOr(Schema.Struct({ displayName: Schema.optional(Schema.String) })),
+  ),
   description: Schema.optional(Schema.Unknown),
   attachment: Schema.optional(
     Schema.Array(
@@ -56,6 +61,12 @@ const MyselfResponse = Schema.Struct({ displayName: Schema.optional(Schema.Strin
 const CommentsResponse = Schema.Struct({
   comments: Schema.Array(Schema.Struct({ body: Schema.optional(Schema.Unknown) })),
 });
+const CreatedComment = Schema.Struct({ id: Schema.String });
+const ErrorResponse = Schema.Struct({
+  errorMessages: Schema.optional(Schema.Array(Schema.String)),
+  errors: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+});
+const decodeErrorResponse = Schema.decodeUnknownOption(ErrorResponse);
 
 /** Accepts `team.atlassian.net`, a full URL, or a pasted issue link. */
 export function normalizeJiraSiteUrl(value: string): string | null {
@@ -92,6 +103,7 @@ function statusCategoryOf(key: string | undefined): JiraIssueStatusCategory {
 
 function issueSummary(siteUrl: string, issue: Issue): JiraIssueSummary {
   const issueType = issue.fields.issuetype?.name ?? "";
+  const assignee = issue.fields.assignee?.displayName?.trim();
   return {
     key: issue.key,
     url: `${siteUrl}/browse/${issue.key}`,
@@ -100,6 +112,7 @@ function issueSummary(siteUrl: string, issue: Issue): JiraIssueSummary {
     isBug: /bug|defect/i.test(issueType),
     status: issue.fields.status?.name ?? "",
     statusCategory: statusCategoryOf(issue.fields.status?.statusCategory?.key),
+    ...(assignee ? { assignee } : {}),
   };
 }
 
@@ -113,7 +126,21 @@ function issueDetail(siteUrl: string, issue: Issue): JiraIssueDetail {
   };
 }
 
-function statusError(status: number): JiraError {
+/**
+ * Jira explains a rejected request (bad JQL, an unavailable transition) in its body.
+ * Those messages name fields and values, never the login.
+ */
+function rejectedDetail(body: unknown): string | null {
+  const decoded = decodeErrorResponse(body);
+  if (decoded._tag === "None") return null;
+  const messages = [
+    ...(decoded.value.errorMessages ?? []),
+    ...Object.values(decoded.value.errors ?? {}),
+  ].filter((message) => message.trim().length > 0);
+  return messages.length === 0 ? null : messages.join(" ").slice(0, ERROR_DETAIL_LIMIT);
+}
+
+function statusError(status: number, body: unknown): JiraError {
   if (status === 401 || status === 403) {
     return new JiraError({
       reason: "unauthorized",
@@ -123,7 +150,11 @@ function statusError(status: number): JiraError {
   if (status === 404) {
     return new JiraError({ reason: "notFound", detail: "Jira could not find that issue." });
   }
-  return new JiraError({ reason: "request", detail: `Jira answered with HTTP ${status}.` });
+  const rejected = status === 400 ? rejectedDetail(body) : null;
+  return new JiraError({
+    reason: "request",
+    detail: rejected === null ? `Jira answered with HTTP ${status}.` : `Jira: ${rejected}`,
+  });
 }
 
 // No cause on purpose: transport errors can quote the request, and its Authorization header.
@@ -133,32 +164,35 @@ const requestFailed = () =>
 export const makeJiraApi = Effect.gen(function* () {
   const httpClient = yield* HttpClient.HttpClient;
 
-  const send = <E>(
+  const send = Effect.fn("JiraApi.send")(function* <E>(
     credentials: JiraCredentials,
     build: (siteUrl: string) => Effect.Effect<HttpClientRequest.HttpClientRequest, E>,
-  ) =>
-    Effect.gen(function* () {
-      const siteUrl = normalizeJiraSiteUrl(credentials.siteUrl);
-      if (siteUrl === null || !credentials.email || !credentials.apiToken) {
-        return yield* new JiraError({
-          reason: "notConfigured",
-          detail: "Connect Jira in Settings → Integrations first.",
-        });
-      }
-      const request = yield* build(siteUrl).pipe(Effect.mapError(requestFailed));
-      const response = yield* httpClient
-        .execute(
-          request.pipe(
-            HttpClientRequest.basicAuth(credentials.email, credentials.apiToken),
-            HttpClientRequest.acceptJson,
-          ),
-        )
-        .pipe(Effect.timeout(REQUEST_TIMEOUT), Effect.mapError(requestFailed));
-      if (response.status < 200 || response.status >= 300) {
-        return yield* statusError(response.status);
-      }
-      return { siteUrl, response };
-    });
+  ) {
+    const siteUrl = normalizeJiraSiteUrl(credentials.siteUrl);
+    if (siteUrl === null || !credentials.email || !credentials.apiToken) {
+      return yield* new JiraError({
+        reason: "notConfigured",
+        detail: "Connect Jira in Settings → Integrations first.",
+      });
+    }
+    const request = yield* build(siteUrl).pipe(Effect.mapError(requestFailed));
+    const response = yield* httpClient
+      .execute(
+        request.pipe(
+          HttpClientRequest.basicAuth(credentials.email, credentials.apiToken),
+          HttpClientRequest.acceptJson,
+        ),
+      )
+      .pipe(Effect.timeout(REQUEST_TIMEOUT), Effect.mapError(requestFailed));
+    if (response.status < 200 || response.status >= 300) {
+      const body =
+        response.status === 400
+          ? yield* response.json.pipe(Effect.orElseSucceed(() => null))
+          : null;
+      return yield* statusError(response.status, body);
+    }
+    return { siteUrl, response };
+  });
 
   const sendJson = <S extends Schema.Top, E>(
     credentials: JiraCredentials,
@@ -187,8 +221,17 @@ export const makeJiraApi = Effect.gen(function* () {
     sendJson(
       credentials,
       Issue,
-      get(`${issuePath(key)}?fields=summary,status,issuetype,description,attachment`),
+      get(`${issuePath(key)}?fields=${[...SUMMARY_FIELDS, "description", "attachment"].join(",")}`),
     ).pipe(Effect.map(({ siteUrl, body }) => issueDetail(siteUrl, body)));
+
+  const searchJql = (credentials: JiraCredentials, jql: string) =>
+    sendJson(
+      credentials,
+      SearchResponse,
+      post("/rest/api/3/search/jql", { jql, fields: SUMMARY_FIELDS, maxResults: SEARCH_LIMIT }),
+    ).pipe(
+      Effect.map(({ siteUrl, body }) => body.issues.map((issue) => issueSummary(siteUrl, issue))),
+    );
 
   const searchIssues = (credentials: JiraCredentials, query: string) => {
     const key = jiraIssueKeyOf(query);
@@ -204,17 +247,7 @@ export const makeJiraApi = Effect.gen(function* () {
         ),
       );
     }
-    return sendJson(
-      credentials,
-      SearchResponse,
-      post("/rest/api/3/search/jql", {
-        jql: jiraSearchJql(query),
-        fields: ["summary", "status", "issuetype"],
-        maxResults: SEARCH_LIMIT,
-      }),
-    ).pipe(
-      Effect.map(({ siteUrl, body }) => body.issues.map((issue) => issueSummary(siteUrl, issue))),
-    );
+    return searchJql(credentials, jiraSearchJql(query));
   };
 
   const listTransitions = (credentials: JiraCredentials, key: string) =>
@@ -249,7 +282,29 @@ export const makeJiraApi = Effect.gen(function* () {
       ),
     );
 
-  return { getIssue, searchIssues, listTransitions, transitionIssue, myself, commentOnce };
+  const comment = (credentials: JiraCredentials, key: string, text: string) =>
+    sendJson(
+      credentials,
+      CreatedComment,
+      post(`${issuePath(key)}/comment`, { body: jiraTextDocument(text) }),
+    ).pipe(
+      Effect.map(({ siteUrl, body }) => ({
+        key,
+        commentId: body.id,
+        url: `${siteUrl}/browse/${key}?focusedCommentId=${encodeURIComponent(body.id)}`,
+      })),
+    );
+
+  return {
+    getIssue,
+    searchIssues,
+    searchJql,
+    listTransitions,
+    transitionIssue,
+    myself,
+    comment,
+    commentOnce,
+  };
 });
 
 export type JiraApi = Effect.Success<typeof makeJiraApi>;

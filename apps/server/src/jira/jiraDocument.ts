@@ -107,6 +107,25 @@ export function jiraDocumentToText(document: unknown): string {
   return render(document, "").trim();
 }
 
+/** Plain text as a document: blank lines separate paragraphs, single newlines stay line breaks. */
+export function jiraTextDocument(text: string) {
+  const paragraphs = text
+    .trim()
+    .split(/\n\s*\n/)
+    .map((paragraph) => paragraph.split("\n"));
+  return {
+    type: "doc",
+    version: 1,
+    content: paragraphs.map((lines) => ({
+      type: "paragraph",
+      content: lines.flatMap((line, index) => [
+        ...(index === 0 ? [] : [{ type: "hardBreak" }]),
+        ...(line.length === 0 ? [] : [{ type: "text", text: line }]),
+      ]),
+    })),
+  };
+}
+
 /** A comment body: one paragraph whose link Jira renders as a card. */
 export function jiraCommentDocument(text: string, url: string) {
   return {

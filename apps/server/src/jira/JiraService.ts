@@ -18,13 +18,28 @@ import { findTransitionTo, type JiraCredentials, makeJiraApi } from "./jiraApi.t
 
 export type JiraPullRequestStage = "opened" | "merged";
 
+export interface JiraComment {
+  readonly key: string;
+  readonly commentId: string;
+  readonly url: string;
+}
+
 export class JiraService extends Context.Service<
   JiraService,
   {
     readonly searchIssues: (
       input: JiraSearchIssuesInput,
     ) => Effect.Effect<JiraSearchIssuesResult, JiraError>;
+    /** Raw JQL, for callers that write their own queries; `searchIssues` takes text or a key. */
+    readonly searchJql: (input: {
+      readonly jql: string;
+    }) => Effect.Effect<JiraSearchIssuesResult, JiraError>;
     readonly getIssue: (input: JiraIssueInput) => Effect.Effect<JiraIssueDetail, JiraError>;
+    /** Plain text; blank lines start new paragraphs. */
+    readonly addComment: (input: {
+      readonly key: string;
+      readonly text: string;
+    }) => Effect.Effect<JiraComment, JiraError>;
     readonly listTransitions: (
       input: JiraIssueInput,
     ) => Effect.Effect<JiraTransitionsResult, JiraError>;
@@ -63,6 +78,19 @@ const make = Effect.gen(function* () {
       Effect.map((issues) => ({ issues })),
     );
 
+  const searchJql = Effect.fn("JiraService.searchJql")(function* (input: { readonly jql: string }) {
+    const login = yield* credentials;
+    return { issues: yield* api.searchJql(login, input.jql) };
+  });
+
+  const addComment = Effect.fn("JiraService.addComment")(function* (input: {
+    readonly key: string;
+    readonly text: string;
+  }) {
+    const login = yield* credentials;
+    return yield* api.comment(login, input.key, input.text);
+  });
+
   const getIssue: JiraService["Service"]["getIssue"] = (input) =>
     credentials.pipe(Effect.flatMap((login) => api.getIssue(login, input.key)));
 
@@ -72,40 +100,44 @@ const make = Effect.gen(function* () {
       Effect.map((transitions) => ({ transitions })),
     );
 
-  const transitionIssue: JiraService["Service"]["transitionIssue"] = (input) =>
-    Effect.gen(function* () {
-      const login = yield* credentials;
-      yield* api.transitionIssue(login, input.key, input.transitionId);
-      return yield* api.getIssue(login, input.key);
-    });
+  const transitionIssue = Effect.fn("JiraService.transitionIssue")(function* (
+    input: JiraTransitionIssueInput,
+  ) {
+    const login = yield* credentials;
+    yield* api.transitionIssue(login, input.key, input.transitionId);
+    return yield* api.getIssue(login, input.key);
+  });
 
   const testConnection = credentials.pipe(Effect.flatMap(api.myself));
 
-  const applyPullRequestStage: JiraService["Service"]["applyPullRequestStage"] = (input) =>
-    Effect.gen(function* () {
-      const jira = yield* settings;
-      if (!jira.siteUrl || !jira.email || !jira.apiToken) return;
-      if (input.stage === "opened" && jira.commentOnPullRequest) {
-        yield* api.commentOnce(jira, input.key, "Pull request opened:", input.pullRequestUrl);
-      }
-      const target = input.stage === "opened" ? jira.openedTransition : jira.mergedTransition;
-      if (!target) return;
-      const issue = yield* api.getIssue(jira, input.key);
-      if (issue.status.toLowerCase() === target.toLowerCase()) return;
-      const transition = findTransitionTo(yield* api.listTransitions(jira, input.key), target);
-      if (transition === null) {
-        yield* Effect.logWarning("Jira has no transition to the configured status", {
-          stage: input.stage,
-          status: target,
-        });
-        return;
-      }
-      yield* api.transitionIssue(jira, input.key, transition.id);
-    }).pipe(Effect.withSpan("JiraService.applyPullRequestStage"));
+  const applyPullRequestStage = Effect.fn("JiraService.applyPullRequestStage")(function* (
+    input: Parameters<JiraService["Service"]["applyPullRequestStage"]>[0],
+  ) {
+    const jira = yield* settings;
+    if (!jira.siteUrl || !jira.email || !jira.apiToken) return;
+    if (input.stage === "opened" && jira.commentOnPullRequest) {
+      yield* api.commentOnce(jira, input.key, "Pull request opened:", input.pullRequestUrl);
+    }
+    const target = input.stage === "opened" ? jira.openedTransition : jira.mergedTransition;
+    if (!target) return;
+    const issue = yield* api.getIssue(jira, input.key);
+    if (issue.status.toLowerCase() === target.toLowerCase()) return;
+    const transition = findTransitionTo(yield* api.listTransitions(jira, input.key), target);
+    if (transition === null) {
+      yield* Effect.logWarning("Jira has no transition to the configured status", {
+        stage: input.stage,
+        status: target,
+      });
+      return;
+    }
+    yield* api.transitionIssue(jira, input.key, transition.id);
+  });
 
   return JiraService.of({
     searchIssues,
+    searchJql,
     getIssue,
+    addComment,
     listTransitions,
     transitionIssue,
     testConnection,

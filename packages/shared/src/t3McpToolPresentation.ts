@@ -48,6 +48,11 @@ export type T3McpToolSummaryAction =
   | "vet-run"
   | "vet-findings"
   | "vet-update"
+  | "jira-read"
+  | "jira-search"
+  | "jira-transitions"
+  | "jira-comment"
+  | "jira-transition"
   | "project-list"
   | "project-read"
   | "project-create"
@@ -319,6 +324,20 @@ const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
   t3_vet_run: tool(["Start", "Starting", "Started", "a vet review"], "vet-run"),
   t3_vet_findings: tool(["Read", "Reading", "Read", "vet findings"], "vet-findings"),
   t3_vet_update_finding: tool(["Record", "Recording", "Recorded", "a vet verdict"], "vet-update"),
+  t3_jira_read_ticket: tool(["Read", "Reading", "Read", "a Jira ticket"], "jira-read"),
+  t3_jira_search_tickets: tool(["Search", "Searching", "Searched", "Jira tickets"], "jira-search"),
+  t3_jira_list_transitions: tool(
+    ["List", "Listing", "Listed", "Jira ticket transitions"],
+    "jira-transitions",
+  ),
+  t3_jira_add_comment: tool(
+    ["Comment on", "Commenting on", "Commented on", "a Jira ticket"],
+    "jira-comment",
+  ),
+  t3_jira_transition_ticket: tool(
+    ["Move", "Moving", "Moved", "a Jira ticket to another status"],
+    "jira-transition",
+  ),
   t3_preview_list: tool(["List", "Listing", "Listed", "preview tabs"], "browser", "browser"),
   t3_preview_close: tool(["Close", "Closing", "Closed", "a preview tab"], "browser", "browser"),
   t3_environment_read: tool(

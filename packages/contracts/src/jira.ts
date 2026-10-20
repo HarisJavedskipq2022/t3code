@@ -54,6 +54,8 @@ export const JiraIssueSummary = Schema.Struct({
   isBug: Schema.Boolean,
   status: TrimmedString,
   statusCategory: JiraIssueStatusCategory,
+  /** Display name; absent when the issue is unassigned. */
+  assignee: Schema.optional(TrimmedString),
 });
 export type JiraIssueSummary = typeof JiraIssueSummary.Type;
 

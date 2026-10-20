@@ -63,6 +63,9 @@ import * as WorktreeHandlers from "./toolkits/worktree/handlers.ts";
 import { WorktreeToolkit } from "./toolkits/worktree/tools.ts";
 import { VetToolkit } from "./toolkits/vet/tools.ts";
 import * as VetHandlers from "./toolkits/vet/handlers.ts";
+import { JiraToolkit } from "./toolkits/jira/tools.ts";
+import * as JiraHandlers from "./toolkits/jira/handlers.ts";
+import * as JiraService from "../jira/JiraService.ts";
 import * as WorktreeMcpService from "./WorktreeMcpService.ts";
 import * as PullRequestsHandlers from "./toolkits/pullRequests/handlers.ts";
 import { PullRequestsToolkit } from "./toolkits/pullRequests/tools.ts";
@@ -1024,6 +1027,10 @@ const layerWorktreeToolkitRegistration = toolkitRegistration(
 
 const layerVetToolkitRegistration = toolkitRegistration(VetToolkit, VetHandlers.layer);
 
+const layerJiraToolkitRegistration = toolkitRegistration(JiraToolkit, JiraHandlers.layer).pipe(
+  Layer.provide(JiraService.layer),
+);
+
 const layerPreviewControlsRegistration = toolkitRegistration(
   PreviewControlsToolkit,
   PreviewControlsHandlers.layer,
@@ -1079,6 +1086,7 @@ export const layer = Layer.mergeAll(
   layerPreviewControlsRegistration,
   layerWorktreeToolkitRegistration,
   layerVetToolkitRegistration,
+  layerJiraToolkitRegistration,
   layerPullRequestsToolkit,
   layerDeviceToolkit,
   layerHtmlToolkit,
