@@ -22,6 +22,15 @@ describe("describeAgentStep", () => {
     expect(describeAgentStep([row({ type: "reasoning" })])).toBe("Thinking");
   });
 
+  it("names an untitled T3 tool call instead of a generic tool", () => {
+    expect(
+      describeAgentStep([row({ type: "dynamic_tool", toolName: "mcp__t3-code__t3_thread_wait" })]),
+    ).toBe("Waiting for a T3 thread");
+    expect(describeAgentStep([row({ type: "dynamic_tool", toolName: "mystery_tool" })])).toBe(
+      "Using a tool",
+    );
+  });
+
   it("skips inherited history and empty messages", () => {
     expect(
       describeAgentStep([

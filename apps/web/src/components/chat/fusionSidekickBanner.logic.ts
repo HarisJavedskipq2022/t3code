@@ -5,10 +5,14 @@ import {
 import {
   type OrchestrationV2ProjectedTurnItem,
   type OrchestrationV2Subagent,
+  type RunId,
   runtimeRequestNeed,
   type ThreadId,
 } from "@t3tools/contracts";
+import { resolveT3McpToolSummaryAction } from "@t3tools/shared/t3McpToolPresentation";
 import * as DateTime from "effect/DateTime";
+
+import { threadReadTargetId } from "./MessagesTimeline.logic";
 
 export type FusionSidekickActivity = Readonly<{
   /** `approval` and `question`: the sidekick is blocked until the user handles it. */
@@ -101,4 +105,27 @@ export function runningSidekickCommandMinutes(
     return Math.max(0, Math.floor((nowMs - DateTime.toEpochMillis(item.startedAt)) / 60_000));
   }
   return null;
+}
+
+/**
+ * Whether the lead's current step is a wait on its sidekick. The sidekick banner
+ * already shows that work, so the lead's own working row would only repeat it.
+ */
+export function leadIsWaitingOnSidekick(
+  items: ReadonlyArray<Pick<OrchestrationV2ProjectedTurnItem, "visibility" | "item">>,
+  sidekickThreadId: ThreadId,
+  runId: RunId,
+): boolean {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const { item, visibility } = items[index]!;
+    if (visibility !== "local") continue;
+    if (item.runId !== runId || item.type !== "dynamic_tool" || item.status !== "running") {
+      return false;
+    }
+    return (
+      resolveT3McpToolSummaryAction(item.toolName) === "thread-wait" &&
+      threadReadTargetId({ structuredPayload: item }) === sidekickThreadId
+    );
+  }
+  return false;
 }

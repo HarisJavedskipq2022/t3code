@@ -1,4 +1,5 @@
 import type { OrchestrationV2ProjectedTurnItem, RunId } from "@t3tools/contracts";
+import { resolveT3McpToolDefinition } from "@t3tools/shared/t3McpToolPresentation";
 
 const STEP_MAX_LENGTH = 80;
 
@@ -37,8 +38,10 @@ export function describeAgentStep(
         return "Searching the web";
       case "file_search":
         return "Searching files";
-      case "dynamic_tool":
-        return item.title?.trim() || "Using a tool";
+      case "dynamic_tool": {
+        const t3Labels = resolveT3McpToolDefinition(item.toolName)?.labels;
+        return item.title?.trim() || (t3Labels ? `${t3Labels[1]} ${t3Labels[3]}` : "Using a tool");
+      }
       case "user_message":
         // The request is the newest item: the agent has not started on it.
         return null;

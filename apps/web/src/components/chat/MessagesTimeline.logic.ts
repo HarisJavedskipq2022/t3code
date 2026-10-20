@@ -175,10 +175,19 @@ export function workEntryDisplayLabel(entry: WorkLogEntry, workspaceRoot: string
   return `${heading.charAt(0).toUpperCase()}${heading.slice(1)}`;
 }
 
+/** T3 tools whose row names the thread they act on instead of "a T3 thread". */
+const THREAD_TARGET_ACTIONS: ReadonlySet<string> = new Set([
+  "thread-read",
+  "thread-send",
+  "thread-wait",
+  "thread-interrupt",
+]);
+
 export function threadReadTargetId(entry: Pick<WorkLogEntry, "structuredPayload">) {
   const item = entry.structuredPayload;
   if (item?.type !== "dynamic_tool") return null;
-  if (resolveT3McpToolDefinition(item.toolName)?.summaryAction !== "thread-read") return null;
+  const action = resolveT3McpToolDefinition(item.toolName)?.summaryAction;
+  if (!action || !THREAD_TARGET_ACTIONS.has(action)) return null;
   const input = item.input;
   const threadId =
     input !== null && typeof input === "object" && "threadId" in input ? input.threadId : null;

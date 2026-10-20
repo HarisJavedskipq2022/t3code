@@ -198,11 +198,30 @@ describe("work entry labels", () => {
     expect(threadReadLabelPrefix(workEntryDisplayLabel(threadRead, undefined))).toBe(prefix);
   });
 
+  it.each([
+    ["t3-code.t3_thread_send", "completed", false, "Sent to thread"],
+    ["mcp__t3-code__t3_thread_wait", "inProgress", true, "Waiting for thread"],
+    ["t3-code.t3_thread_interrupt", "completed", false, "Requested an interrupt of thread"],
+  ] as const)("names the target thread of %s", (toolName, toolLifecycleStatus, active, prefix) => {
+    const call = {
+      ...entry,
+      itemType: "dynamic_tool" as const,
+      toolLifecycleStatus,
+      structuredPayload: {
+        type: "dynamic_tool",
+        toolName,
+        input: { threadId: "thread-sidekick", timeoutMs: 3_600_000 },
+      } as never,
+    };
+    expect(threadReadTargetId(call)).toBe("thread-sidekick");
+    expect(threadReadLabelPrefix(liveWorkEntryLabel(call, undefined, active))).toBe(prefix);
+  });
+
   it("finds no target for other tools or thread reads without one", () => {
     const payload = (toolName: string, input: unknown) => ({
       structuredPayload: { type: "dynamic_tool", toolName, input } as never,
     });
-    expect(threadReadTargetId(payload("t3-code.t3_thread_wait", { threadId: "t" }))).toBeNull();
+    expect(threadReadTargetId(payload("t3-code.t3_thread_list", { threadId: "t" }))).toBeNull();
     expect(threadReadTargetId(payload("t3-code.t3_thread_read", { threadId: "  " }))).toBeNull();
     expect(threadReadTargetId(payload("t3-code.t3_thread_read", null))).toBeNull();
   });

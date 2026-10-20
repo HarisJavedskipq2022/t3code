@@ -27,6 +27,7 @@ import { worktreeServicesEnvironment } from "../../state/worktreeServices";
 import { buildThreadRouteParams } from "../../threadRoutes";
 import { describeAgentStep } from "./agentStep.logic";
 import { useFusionSidekickBanner } from "./fusionSidekickBanner";
+import { leadIsWaitingOnSidekick } from "./fusionSidekickBanner.logic";
 
 /**
  * HCode's additions to ChatView: app services, the Fusion sidekick banner, the composer's
@@ -95,7 +96,11 @@ export function useForkChatViewExtras(input: {
     void interruptThreadTurn({ environmentId, input: { threadId } });
   };
   const stopThreadStable = useStableCallback(stopThread);
-  const { item: fusionSidekickBannerItem, blockedThreadId } = useFusionSidekickBanner({
+  const {
+    item: fusionSidekickBannerItem,
+    blockedThreadId,
+    sidekickThreadId,
+  } = useFusionSidekickBanner({
     threadRef: input.routeThreadDetailRef,
     leadWorking: input.isWorking,
     leadActivityStartedAt: input.leadActivityStartedAt,
@@ -110,6 +115,10 @@ export function useForkChatViewExtras(input: {
 
   const activeRunStep =
     input.activeRunId === null ? null : describeAgentStep(input.turnItems ?? [], input.activeRunId);
+  const waitingOnSidekick =
+    sidekickThreadId !== null &&
+    input.activeRunId !== null &&
+    leadIsWaitingOnSidekick(input.turnItems ?? [], sidekickThreadId, input.activeRunId);
   const workingStep = input.isPreparingWorktree
     ? "Setting up worktree"
     : input.isCompacting
@@ -117,7 +126,11 @@ export function useForkChatViewExtras(input: {
       : (activeRunStep ?? "Working");
   const composerWorkingStatus =
     input.isWorking && !input.paintOnlyDisplayedTimeline
-      ? { step: workingStep, startedAt: input.activeWorkStartedAt }
+      ? {
+          step: workingStep,
+          startedAt: input.activeWorkStartedAt,
+          shownBySidekickBanner: waitingOnSidekick,
+        }
       : null;
 
   const addVetSurface = () => {

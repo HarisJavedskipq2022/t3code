@@ -30,6 +30,7 @@ import { CommandOutputPanel, useCommandOutputStreaming } from "./CommandOutputPa
 import { resolveExternalWebLinkHref } from "./externalLinkContextMenu";
 import type { ExpandedImagePreview } from "./ExpandedImagePreview";
 import { ShellCommandBlock } from "./ShellCommandBlock";
+import { useReadableT3ToolArgs } from "./t3ToolArgs";
 
 interface V2ItemInspectorProps {
   readonly projectedItem: OrchestrationV2ProjectedTurnItem;
@@ -241,6 +242,7 @@ export const V2ItemInspector = memo(function V2ItemInspector(props: V2ItemInspec
   const fetched = useFetchedTurnItem(props.projectedItem, props.environmentId, streamsOutput);
   const item = fetched.item;
   const outputState = fetched.output;
+  const toolArgs = useReadableT3ToolArgs(item, props.environmentId);
   const support = useV2ItemSupport({
     environmentId: props.environmentId,
     sourceThreadId: props.projectedItem.sourceThreadId,
@@ -377,7 +379,7 @@ export const V2ItemInspector = memo(function V2ItemInspector(props: V2ItemInspec
       {item.type === "dynamic_tool" ? (
         <ToolCallBody
           toolName={item.toolName}
-          args={item.input}
+          args={toolArgs}
           {...outputState}
           onImageExpand={props.onImageExpand}
         />

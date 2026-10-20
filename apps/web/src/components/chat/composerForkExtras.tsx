@@ -16,7 +16,12 @@ export interface ComposerForkProps {
   /** Called when Fusion turns on, so an unstarted thread can move to its own worktree. */
   onFusionEnabled?: () => void;
   /** What the agent is doing while a turn runs; null when it is idle. */
-  workingStatus?: { readonly step: string; readonly startedAt: string | null } | null;
+  workingStatus?: {
+    readonly step: string;
+    readonly startedAt: string | null;
+    /** The lead is waiting on its sidekick, whose banner already shows the work. */
+    readonly shownBySidekickBanner?: boolean;
+  } | null;
 }
 
 /** The Fusion resting-controls block, only on servers that lead with Fusion. */
@@ -80,9 +85,10 @@ export function composerWorking(input: {
 }) {
   // An agent waiting on an approval or an answer is not working; the drawer says so.
   const status = input.hasBlockingTopDrawer ? null : (input.workingStatus ?? null);
-  const row = status ? (
-    <ComposerWorkingRow step={status.step} startedAt={status.startedAt} />
-  ) : null;
+  const row =
+    status && !status.shownBySidekickBanner ? (
+      <ComposerWorkingRow step={status.step} startedAt={status.startedAt} />
+    ) : null;
   return {
     row,
     inline: input.inlineTasksBadge ?? row,
