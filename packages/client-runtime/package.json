@@ -351,6 +351,10 @@
       "types": "./src/work-log/commandLabel.ts",
       "default": "./src/work-log/commandLabel.ts"
     },
+    "./work-log/fork-row-labels": {
+      "types": "./src/work-log/forkRowLabels.ts",
+      "default": "./src/work-log/forkRowLabels.ts"
+    },
     "./work-log/scroll-anchor": {
       "types": "./src/work-log/scrollAnchor.ts",
       "default": "./src/work-log/scrollAnchor.ts"

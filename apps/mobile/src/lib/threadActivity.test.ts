@@ -2560,8 +2560,8 @@ it("caps one-line work-log labels for multi-kilobyte commands", () => {
     command,
   };
   for (const label of [workEntryRowLabel(entry), workEntryRowLabel(entry, true)]) {
-    expect(label.startsWith("cd /repo && python3 - <<'PY' print('x')")).toBe(true);
-    expect(label.length).toBeLessThanOrEqual(203);
+    // The fork names an inline heredoc script rather than printing it.
+    expect(label).toBe("Python script · 400 lines");
   }
 });
 

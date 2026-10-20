@@ -16,6 +16,7 @@ import {
   commandDisplayText,
   commandProgramName,
 } from "@t3tools/client-runtime/work-log/command-label";
+import { compactCommandLabel } from "@t3tools/client-runtime/work-log/fork-row-labels";
 import {
   contextCompactionLabel,
   liveThoughtLine,
@@ -272,7 +273,9 @@ export function workEntryRowLabel(entry: WorkLogPresentationEntry, expanded = fa
     return entry.toolLifecycleStatus === "inProgress" ? "Thinking" : "Thought";
   const presentation = resolveWorkEntryToolPresentation(entry);
   if (presentation) return presentation.displayName;
-  if (entry.command?.trim()) return compactWorkEntryText(commandDisplayText(entry.command));
+  if (entry.command?.trim()) {
+    return compactWorkEntryText(compactCommandLabel(commandDisplayText(entry.command)));
+  }
   const action = toolGroupAction(entry);
   const isToolRead = action === "read" && entry.itemType === "dynamic_tool";
   if (action === "code-search" || action === "search") {

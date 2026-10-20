@@ -14,6 +14,10 @@ import {
   commandProgramName,
 } from "@t3tools/client-runtime/work-log/command-label";
 import {
+  compactCommandLabel,
+  withToolQuery,
+} from "@t3tools/client-runtime/work-log/fork-row-labels";
+import {
   liveActivityToolStatus,
   normalizeCompactToolLabel,
   resolveWorkEntryToolPresentation,
@@ -137,7 +141,9 @@ export function workEntryDisplayLabel(entry: WorkLogEntry, workspaceRoot: string
   }
   const toolPresentation = resolveWorkEntryToolPresentation(entry);
   if (toolPresentation) return toolPresentation.displayName;
-  if (entry.command?.trim()) return commandDisplayText(entry.command);
+  if (entry.command?.trim()) {
+    return compactCommandLabel(commandDisplayText(entry.command), workspaceRoot);
+  }
   const action = toolGroupAction(entry);
   if (action === "code-search" || action === "search") {
     const searchLabel =
@@ -173,7 +179,10 @@ export function workEntryDisplayLabel(entry: WorkLogEntry, workspaceRoot: string
     return "Read file";
   }
   const heading = normalizeCompactToolLabel(entry.toolTitle || entry.label);
-  return `${heading.charAt(0).toUpperCase()}${heading.slice(1)}`;
+  return withToolQuery(
+    `${heading.charAt(0).toUpperCase()}${heading.slice(1)}`,
+    item?.type === "dynamic_tool" ? item.input : undefined,
+  );
 }
 
 /** T3 tools whose row names the thread they act on instead of "a T3 thread". */
@@ -574,6 +583,8 @@ type MessagesTimelineRowContent =
       toolIcon?: WorkLogEntry["toolIcon"];
       summaryToolIcon?: "browser" | "device" | "t3-code" | "pull-request";
       hasFailure: boolean;
+      /** Calls in the group that failed, anywhere in it, not just the last. */
+      failedCount?: number;
     }
   | {
       kind: "turn-fold";
@@ -1764,6 +1775,7 @@ export function deriveMessagesTimelineRows(input: {
             hasFailure:
               latestToolEntry !== undefined &&
               workEntryDisplayIndicatesToolFailure(latestToolEntry),
+            failedCount: visibleGroupedEntries.filter(workEntryDisplayIndicatesToolFailure).length,
           });
           if (expanded) {
             nextRows.push(

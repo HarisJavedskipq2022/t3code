@@ -3984,6 +3984,7 @@ function WorkGroupToggleTimelineRow({
       iconName={row.summaryToolIcon ?? row.toolSurface ?? toolGroupSummaryIconName(row.summaryKind)}
       toolIcon={row.toolIcon}
       failed={row.hasFailure}
+      failedCount={row.failedCount}
       expanded={row.expanded}
       createdAt={row.createdAt}
       timestampFormat={ctx.timestampFormat}
@@ -3997,6 +3998,7 @@ function WorkGroupHeader(props: {
   iconName: WorkEntryIconName;
   toolIcon?: ToolActivityIcon | undefined;
   failed?: boolean | undefined;
+  failedCount?: number | undefined;
   active?: boolean | undefined;
   expanded: boolean;
   createdAt: string;
@@ -4023,7 +4025,15 @@ function WorkGroupHeader(props: {
         </span>
       }
       trailing={
-        <TimelineRowTimestamp createdAt={props.createdAt} timestampFormat={props.timestampFormat} />
+        <>
+          {props.failedCount ? (
+            <WorkRowTag tone="failed" text={`${props.failedCount} failed`} />
+          ) : null}
+          <TimelineRowTimestamp
+            createdAt={props.createdAt}
+            timestampFormat={props.timestampFormat}
+          />
+        </>
       }
     />
   );
