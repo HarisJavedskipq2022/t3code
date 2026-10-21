@@ -4,6 +4,7 @@ import type {
   OrchestrationV2FusionRole,
   OrchestrationV2ThreadFusion,
 } from "@t3tools/contracts";
+import { CircleDashedIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { resolveComposerFusion, useFusionDraftStore } from "~/fusionDraftStore";
@@ -38,6 +39,22 @@ function defaultFusion(
       role.sidekick.instanceId !== sidekick.instanceId || role.sidekick.model !== sidekick.model,
   );
   return kept.length === 0 ? { sidekick } : { sidekick, roles: kept };
+}
+
+/**
+ * The background-work banner's icon. While commands run it turns like the
+ * Working row's, stepped so it never repaints every frame; while the work
+ * waits on others it keeps upstream's pulsing dot.
+ */
+export function ForkBackgroundWorkIcon({ waiting }: { readonly waiting: boolean }) {
+  return waiting ? (
+    <span
+      className="size-1.5 rounded-full bg-foreground motion-safe:animate-status-pulse"
+      aria-hidden="true"
+    />
+  ) : (
+    <CircleDashedIcon aria-hidden className="fork-working-spin text-primary" />
+  );
 }
 
 /** The Fusion resting-controls block, only on servers that lead with Fusion. */

@@ -4,6 +4,7 @@ import { ThreadFind, ThreadFindCanvas, type ThreadFindControls } from "./chat/Th
 import { withTicketBootstrap } from "@t3tools/client-runtime/jira-ticket-draft";
 import { clearTicketDraft, readTicketDraft } from "./jira/ticketDraftStore";
 import { fusionTurnStartField, useForkChatViewExtras } from "./chat/forkChatViewExtras";
+import { ForkBackgroundWorkIcon } from "./chat/composerForkExtras";
 import { THREAD_FIND_BAR_RESERVED_HEIGHT } from "./chat/ThreadFindBar";
 import { usageLimitRecoveryBannerItem } from "./chat/UsageLimitRecoveryBanner";
 import {
@@ -5500,15 +5501,7 @@ export default function ChatView(props: ChatViewProps) {
       id: `background-work:${activeThread.id}`,
       variant: "default",
       priority: "activity",
-      icon: (
-        <span
-          className={cn(
-            "size-1.5 rounded-full bg-foreground",
-            presentation.waiting && "motion-safe:animate-status-pulse",
-          )}
-          aria-hidden="true"
-        />
-      ),
+      icon: <ForkBackgroundWorkIcon waiting={presentation.waiting} />,
       title: presentation.title,
       description:
         presentation.items.length === 1 && presentation.items[0]?.childThreadId === undefined

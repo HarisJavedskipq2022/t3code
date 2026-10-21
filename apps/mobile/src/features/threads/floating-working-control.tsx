@@ -465,9 +465,22 @@ function FloatingStatusLabel(props: {
           tintColorClassName="foreground"
           type="monochrome"
         />
-        <Text className="shrink font-t3-medium text-xs text-foreground" numberOfLines={1}>
-          {props.status.label}
-        </Text>
+        {props.status.waiting ? (
+          <Text className="shrink font-t3-medium text-xs text-foreground" numberOfLines={1}>
+            {props.status.label}
+          </Text>
+        ) : (
+          // Running commands shimmer like a preparing worktree, so live work reads as live.
+          <ShimmeringWorkContent
+            className="shrink"
+            textClassName="font-t3-medium"
+            compact
+            icon="terminal"
+            iconSubtleColor="transparent"
+            label={props.status.label}
+            showIcon={false}
+          />
+        )}
       </StatusLabelRow>
     );
   }
