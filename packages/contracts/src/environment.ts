@@ -100,6 +100,8 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
   worktreesDirectory: Schema.optionalKey(Schema.Boolean),
   /** Server accepts a Fusion pairing on messages and leads with it. Absent on older servers. */
   fusion: Schema.optionalKey(Schema.Boolean),
+  /** Server routes Fusion steps to named role sidekicks. Older servers drop `roles` silently. */
+  fusionRoles: Schema.optionalKey(Schema.Boolean),
   threadAutoSettlementScope: Schema.optionalKey(Schema.Boolean),
   threadRestartContinuation: Schema.optionalKey(Schema.Boolean),
   projectSettingsOverrides: Schema.optionalKey(Schema.Boolean),

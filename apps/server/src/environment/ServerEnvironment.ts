@@ -235,6 +235,7 @@ export const make = Effect.gen(function* () {
       settledWorktreeCleanup: true,
       worktreesDirectory: true,
       fusion: true,
+      fusionRoles: true,
       threadAutoSettlementScope: true,
       threadRestartContinuation: true,
       projectSettingsOverrides: true,

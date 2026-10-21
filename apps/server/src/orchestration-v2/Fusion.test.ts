@@ -103,3 +103,62 @@ describe("fusionTurnInstructions", () => {
     }
   });
 });
+
+describe("Fusion role sidekicks", () => {
+  const codex = ProviderInstanceId.make("codex");
+  const withRoles: OrchestrationV2ThreadFusion = {
+    ...fusion,
+    roles: [
+      {
+        name: "ui",
+        useFor: "React components and CSS",
+        sidekick: { instanceId: codex, model: "gpt-6-luna" },
+      },
+      { name: "docs", useFor: "", sidekick: { instanceId: codex, model: "gpt-6-mini" } },
+    ],
+  };
+
+  it("detects adding, renaming, re-describing, and re-modelling a role", () => {
+    const [ui, docs] = withRoles.roles!;
+    expect(threadFusionChanged(fusion, withRoles)).toBe(true);
+    expect(threadFusionChanged(withRoles, fusion)).toBe(true);
+    expect(threadFusionChanged(withRoles, { ...withRoles, roles: [...withRoles.roles!] })).toBe(
+      false,
+    );
+    expect(
+      threadFusionChanged(withRoles, { ...withRoles, roles: [{ ...ui!, name: "web" }, docs!] }),
+    ).toBe(true);
+    expect(
+      threadFusionChanged(withRoles, { ...withRoles, roles: [{ ...ui!, useFor: "CSS" }, docs!] }),
+    ).toBe(true);
+    expect(
+      threadFusionChanged(withRoles, {
+        ...withRoles,
+        roles: [{ ...ui!, sidekick: { instanceId: codex, model: "gpt-6-sol" } }, docs!],
+      }),
+    ).toBe(true);
+  });
+
+  it("lists every sidekick with its role and its own thread, and keeps one at work at a time", () => {
+    const text = fusionTurnInstructions({
+      thread: { fusion: withRoles },
+      subagents: [
+        subagent({
+          childThreadId: ThreadId.make("thread-ui"),
+          providerInstanceId: codex,
+          model: "gpt-6-luna",
+          modelSelection: { instanceId: codex, model: "gpt-6-luna" },
+        }),
+      ],
+      compact: false,
+    });
+    expect(text).toContain('- "ui", for React components and CSS: thread thread-ui.');
+    expect(text).toContain(
+      '- "docs": not started. Target: {"providerInstanceId":"codex","model":"gpt-6-mini"}.',
+    );
+    expect(text).toContain('title starting "Fusion sidekick (docs): "');
+    expect(text).toContain("- default, for every step no role above fits: not started.");
+    expect(text).toContain("Only one sidekick works at a time");
+    expect(text).not.toContain("Sidekick target:");
+  });
+});

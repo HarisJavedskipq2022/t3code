@@ -1,6 +1,7 @@
 import type {
   EnvironmentId,
   ModelSelection,
+  OrchestrationV2FusionRole,
   OrchestrationV2ThreadFusion,
 } from "@t3tools/contracts";
 import type { ReactNode } from "react";
@@ -24,6 +25,21 @@ export interface ComposerForkProps {
   } | null;
 }
 
+/**
+ * The remembered lineup, minus roles that now clash with the default sidekick:
+ * the composer's model may stand in for a sidekick that was never chosen.
+ */
+function defaultFusion(
+  sidekick: ModelSelection,
+  roles: ReadonlyArray<OrchestrationV2FusionRole>,
+): OrchestrationV2ThreadFusion {
+  const kept = roles.filter(
+    (role) =>
+      role.sidekick.instanceId !== sidekick.instanceId || role.sidekick.model !== sidekick.model,
+  );
+  return kept.length === 0 ? { sidekick } : { sidekick, roles: kept };
+}
+
 /** The Fusion resting-controls block, only on servers that lead with Fusion. */
 export function useComposerFusionBlocks(input: {
   environmentId: EnvironmentId;
@@ -37,12 +53,13 @@ export function useComposerFusionBlocks(input: {
   disabled: boolean;
   onFusionEnabled: (() => void) | undefined;
 }): ReadonlyArray<{ id: string; content: ReactNode }> {
-  const fusionSupported =
-    useServerConfigs().get(input.environmentId)?.environment.capabilities.fusion === true;
+  const capabilities = useServerConfigs().get(input.environmentId)?.environment.capabilities;
+  const fusionSupported = capabilities?.fusion === true;
   const draftFusion = useFusionDraftStore(
     (state) => state.byTargetKey[input.composerDraftTargetKey],
   );
   const lastFusionSidekick = useFusionDraftStore((state) => state.lastSidekick);
+  const lastFusionRoles = useFusionDraftStore((state) => state.lastRoles);
   const setFusionDraft = useFusionDraftStore((state) => state.setFusion);
   if (!fusionSupported) return [];
   const composerFusion = resolveComposerFusion(draftFusion, input.threadFusion);
@@ -56,7 +73,11 @@ export function useComposerFusionBlocks(input: {
           <ComposerFusionControl
             environmentId={input.environmentId}
             fusion={composerFusion}
-            defaultSidekick={lastFusionSidekick ?? input.selectedModelSelection}
+            defaultFusion={defaultFusion(
+              lastFusionSidekick ?? input.selectedModelSelection,
+              lastFusionRoles,
+            )}
+            rolesSupported={capabilities?.fusionRoles === true}
             instanceEntries={input.instanceEntries}
             modelOptionsByInstance={input.modelOptionsByInstance}
             planModeEnabled={input.planModeEnabled}

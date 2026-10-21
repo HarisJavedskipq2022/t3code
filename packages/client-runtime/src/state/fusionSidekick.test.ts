@@ -295,6 +295,7 @@ describe("presentFusionSidekick", () => {
     childThreadId: ThreadId.make("thread-sidekick"),
     title: "Add FizzBuzz",
     reason: null,
+    role: null,
   });
   const startedAt = DateTime.makeUnsafe("2026-10-13T10:00:00.000Z");
   const running = row({
@@ -318,6 +319,16 @@ describe("presentFusionSidekick", () => {
       stalled: false,
       openLabel: "Open sidekick",
     });
+  });
+
+  it("names a role sidekick by its role", () => {
+    expect(
+      presentFusionSidekick({
+        activity: { ...activity("approval"), role: "ui" },
+        items: [],
+        nowMs: 0,
+      }).title,
+    ).toBe("ui sidekick needs approval");
   });
 
   it("warns once the sidekick's command has run past the stall threshold", () => {

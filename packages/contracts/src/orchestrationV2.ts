@@ -35,6 +35,7 @@ import {
   ScheduledTaskId,
   ThreadId,
   TrimmedNonEmptyString,
+  TrimmedString,
   TurnItemId,
 } from "./baseSchemas.ts";
 import { ChatAttachment } from "./chatAttachment.ts";
@@ -370,13 +371,43 @@ export const OrchestrationV2LimitRecoveryUpdate = Schema.Struct({
 );
 export type OrchestrationV2LimitRecoveryUpdate = typeof OrchestrationV2LimitRecoveryUpdate.Type;
 
+/** A sidekick the user named for one kind of work; the lead sends it the steps that fit. */
+export const OrchestrationV2FusionRole = Schema.Struct({
+  name: TrimmedNonEmptyString.check(Schema.isMaxLength(40)),
+  /** The user's own words for which steps belong here; may be empty. */
+  useFor: TrimmedString.check(Schema.isMaxLength(300)),
+  sidekick: ModelSelection,
+});
+export type OrchestrationV2FusionRole = typeof OrchestrationV2FusionRole.Type;
+
+export const MAX_FUSION_ROLES = 3;
+
 /**
- * Fusion pairing: the thread's own model leads (plans and reviews) while this
- * selection runs one persistent sidekick child that writes the code.
+ * Fusion pairing: the thread's own model leads (plans and reviews) while
+ * persistent sidekick children write the code. `sidekick` takes every step no
+ * role fits. Older servers and clients drop `roles` and keep the default.
  */
 export const OrchestrationV2ThreadFusion = Schema.Struct({
   sidekick: ModelSelection,
-});
+  roles: Schema.optionalKey(
+    Schema.Array(OrchestrationV2FusionRole).check(Schema.isMaxLength(MAX_FUSION_ROLES)),
+  ),
+}).check(
+  Schema.makeFilter((fusion) => {
+    const roles = fusion.roles ?? [];
+    // A sidekick thread is recognised by its instance and model, so each must be distinct.
+    const models = new Set(
+      [fusion.sidekick, ...roles.map((role) => role.sidekick)].map(
+        (selection) => `${selection.instanceId}\u0000${selection.model}`,
+      ),
+    );
+    const names = new Set(roles.map((role) => role.name.toLowerCase()));
+    return (
+      (models.size === roles.length + 1 && names.size === roles.length) ||
+      "Fusion sidekicks need distinct models and role names."
+    );
+  }),
+);
 export type OrchestrationV2ThreadFusion = typeof OrchestrationV2ThreadFusion.Type;
 
 export const OrchestrationV2AppThread = Schema.Struct({

@@ -9,7 +9,7 @@ import {
 import * as DateTime from "effect/DateTime";
 import { describe, expect, it } from "vite-plus/test";
 
-import { findFusionSidekick } from "./fusion.ts";
+import { findFusionSidekick, findFusionSidekickFor, fusionSidekickRoleName } from "./fusion.ts";
 
 const commandCode = ProviderInstanceId.make("acpRegistry_command_code");
 const fusion: OrchestrationV2ThreadFusion = {
@@ -76,5 +76,37 @@ describe("findFusionSidekick", () => {
     const failed = subagent({ status: "failed" });
     expect(findFusionSidekick([failed], fusion)).toBe(failed);
     expect(findFusionSidekick([failed], fusion, new Set(["idle", "completed"]))).toBeNull();
+  });
+});
+
+describe("Fusion role sidekicks", () => {
+  const codex = ProviderInstanceId.make("codex");
+  const withRoles: OrchestrationV2ThreadFusion = {
+    ...fusion,
+    roles: [
+      { name: "ui", useFor: "React and CSS", sidekick: { instanceId: codex, model: "gpt-6-luna" } },
+    ],
+  };
+  const defaultChild = subagent({ childThreadId: ThreadId.make("thread-default") });
+  const uiChild = subagent({
+    childThreadId: ThreadId.make("thread-ui"),
+    providerInstanceId: codex,
+    model: "gpt-6-luna",
+    modelSelection: { instanceId: codex, model: "gpt-6-luna" },
+  });
+
+  it("finds the most recently started sidekick of any role", () => {
+    expect(findFusionSidekick([defaultChild, uiChild], withRoles)).toBe(uiChild);
+    expect(findFusionSidekick([uiChild, defaultChild], withRoles)).toBe(defaultChild);
+    // Without the role configured, its child is not a sidekick.
+    expect(findFusionSidekick([defaultChild, uiChild], fusion)).toBe(defaultChild);
+  });
+
+  it("finds each sidekick's own thread and names its role", () => {
+    const children = [uiChild, defaultChild];
+    expect(findFusionSidekickFor(children, withRoles.roles![0]!.sidekick)).toBe(uiChild);
+    expect(findFusionSidekickFor(children, withRoles.sidekick)).toBe(defaultChild);
+    expect(fusionSidekickRoleName(withRoles, uiChild)).toBe("ui");
+    expect(fusionSidekickRoleName(withRoles, defaultChild)).toBeNull();
   });
 });

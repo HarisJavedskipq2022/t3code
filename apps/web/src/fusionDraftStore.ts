@@ -1,4 +1,8 @@
-import type { ModelSelection, OrchestrationV2ThreadFusion } from "@t3tools/contracts";
+import type {
+  ModelSelection,
+  OrchestrationV2FusionRole,
+  OrchestrationV2ThreadFusion,
+} from "@t3tools/contracts";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
@@ -10,8 +14,9 @@ interface FusionDraftState {
    * untouched: the composer shows the thread's own pairing and sends nothing.
    */
   byTargetKey: Record<string, OrchestrationV2ThreadFusion | null>;
-  /** The sidekick to offer when Fusion is next turned on. */
+  /** The lineup to offer when Fusion is next turned on. */
   lastSidekick: ModelSelection | null;
+  lastRoles: ReadonlyArray<OrchestrationV2FusionRole>;
   setFusion: (targetKey: string, fusion: OrchestrationV2ThreadFusion | null) => void;
 }
 
@@ -20,10 +25,12 @@ export const useFusionDraftStore = create<FusionDraftState>()(
     (set) => ({
       byTargetKey: {},
       lastSidekick: null,
+      lastRoles: [],
       setFusion: (targetKey, fusion) =>
         set((state) => ({
           byTargetKey: { ...state.byTargetKey, [targetKey]: fusion },
           lastSidekick: fusion?.sidekick ?? state.lastSidekick,
+          lastRoles: fusion === null ? state.lastRoles : (fusion.roles ?? []),
         })),
     }),
     {

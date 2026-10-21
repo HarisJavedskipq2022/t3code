@@ -15,6 +15,7 @@ import {
   type OrchestrationV2Subagent,
   type ScopedThreadRef,
 } from "@t3tools/contracts";
+import { fusionSidekickRoleName } from "@t3tools/shared/fusion";
 import { formatDuration } from "@t3tools/shared/orchestrationTiming";
 import { Atom } from "effect/reactivity";
 import { Pressable, View } from "react-native";
@@ -60,6 +61,7 @@ export function FusionSidekickStatus(props: {
     child,
     leadWorking: threadRuntimeIsActive(lead?.runtime),
     leadActivityStartedAt: lead?.runtime?.activityStartedAt ?? null,
+    role: lead?.fusion && sidekick ? fusionSidekickRoleName(lead.fusion, sidekick) : null,
   });
   // Only a working or blocked sidekick's thread is read, and only while the lead is on screen.
   const items = useThreadVisibleTurnItems({

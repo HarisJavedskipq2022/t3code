@@ -7,6 +7,7 @@ import {
 } from "@t3tools/client-runtime/state/fusion-sidekick";
 import { resolveThreadWorkingStartedAt } from "@t3tools/client-runtime/state/models";
 import type { OrchestrationV2Subagent, ScopedThreadRef, ThreadId } from "@t3tools/contracts";
+import { fusionSidekickRoleName } from "@t3tools/shared/fusion";
 import { Atom } from "effect/reactivity";
 import { CombineIcon } from "lucide-react";
 
@@ -50,11 +51,13 @@ export function useFusionSidekickBanner(input: {
       ? null
       : scopeThreadRef(threadRef.environmentId, childThreadId);
   const child = useThreadShell(childRef);
+  const leadFusion = useThreadShell(threadRef)?.fusion ?? null;
   const activity = resolveFusionSidekickActivity({
     sidekick,
     child,
     leadWorking,
     leadActivityStartedAt,
+    role: leadFusion && sidekick ? fusionSidekickRoleName(leadFusion, sidekick) : null,
   });
 
   const kind = activity?.kind ?? null;

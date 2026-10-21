@@ -67,6 +67,8 @@ export type FusionSidekickActivity = Readonly<{
   title: string;
   /** Why a stopped sidekick stopped, when the provider said. */
   reason: string | null;
+  /** The role the user named this sidekick for; null for the default sidekick. */
+  role: string | null;
 }>;
 
 const STOPPED_STATUSES = new Set(["failed", "cancelled", "interrupted"]);
@@ -87,10 +89,16 @@ export function resolveFusionSidekickActivity(input: {
   leadWorking: boolean;
   /** When the lead's current activity began; null while it is idle. */
   leadActivityStartedAt: string | null;
+  role?: string | null;
 }): FusionSidekickActivity | null {
   const { sidekick, child } = input;
   if (sidekick?.childThreadId == null || child === null) return null;
-  const base = { childThreadId: sidekick.childThreadId, title: child.title, reason: null };
+  const base = {
+    childThreadId: sidekick.childThreadId,
+    title: child.title,
+    reason: null,
+    role: input.role ?? null,
+  };
   if (child.hasPendingApprovals || child.hasPendingUserInput) {
     // A request left behind by a finished run no longer holds anything up.
     if (!threadRuntimeIsActive(child.runtime)) return null;
@@ -192,8 +200,9 @@ export function presentFusionSidekick(input: {
     kind === "working" ? runningSidekickCommandMinutes(items, input.nowMs) : null;
   const stalled = commandMinutes !== null && commandMinutes >= SIDEKICK_STALL_MINUTES;
   const elapsed = commandMinutes ? ` · ${commandMinutes}m` : "";
+  const title = TITLES[stalled ? "stalled" : kind];
   return {
-    title: TITLES[stalled ? "stalled" : kind],
+    title: activity.role === null ? title : `${activity.role} ${title.toLowerCase()}`,
     warning: kind === "stopped" || blocker !== null || stalled,
     description: activity.reason ?? (step ? `${step}${elapsed}` : activity.title),
     stalled,
