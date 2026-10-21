@@ -4,7 +4,7 @@ import { Spinner } from "~/components/ui/spinner";
 
 import { threadSyncLabel, type ThreadSyncPhase } from "../../threadSync";
 import { ComposerBanner } from "./ComposerBanner";
-import { WorkingTimer } from "./MessagesTimeline";
+import { WorkingTimer } from "./TimelineWorkGroupRows";
 
 export function ComposerActivityRow({ phase }: { readonly phase: ThreadSyncPhase }) {
   return (

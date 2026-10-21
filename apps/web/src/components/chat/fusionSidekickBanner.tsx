@@ -16,7 +16,7 @@ import { useThreadShell, useThreadVisibleTurnItems } from "~/state/entities";
 import { environmentThreadDetails } from "~/state/threads";
 import { Button } from "../ui/button";
 import type { ComposerBannerStackItem } from "./ComposerBannerStack";
-import { WorkingTimer } from "./MessagesTimeline";
+import { WorkingTimer } from "./TimelineWorkGroupRows";
 
 const NO_SIDEKICK_ATOM = Atom.make<OrchestrationV2Subagent | null>(null).pipe(
   Atom.withLabel("fusion-sidekick:none"),
