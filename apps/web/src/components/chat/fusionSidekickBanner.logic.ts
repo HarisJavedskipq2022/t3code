@@ -1,5 +1,5 @@
 import type { OrchestrationV2ProjectedTurnItem, RunId, ThreadId } from "@t3tools/contracts";
-import { resolveT3McpToolSummaryAction } from "@t3tools/shared/t3McpToolPresentation";
+import { resolveT3McpToolDefinition } from "@t3tools/shared/t3McpToolPresentation";
 
 import { threadReadTargetId } from "./MessagesTimeline.logic";
 
@@ -19,7 +19,7 @@ export function leadIsWaitingOnSidekick(
       return false;
     }
     return (
-      resolveT3McpToolSummaryAction(item.toolName) === "thread-wait" &&
+      resolveT3McpToolDefinition(item.toolName)?.summaryAction === "thread-wait" &&
       threadReadTargetId({ structuredPayload: item }) === sidekickThreadId
     );
   }
