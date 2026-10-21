@@ -28,6 +28,8 @@ export function CommandOutputPanel(props: {
   readonly itemId: TurnItemId;
   /** Shown above the output, from its text. */
   readonly renderSummary?: (text: string) => ReactNode;
+  /** The output formatted for reading, or null to show it as the terminal printed it. */
+  readonly renderOutput?: (text: string) => ReactNode;
 }) {
   const { data, error } = useEnvironmentQuery(
     orchestrationEnvironment.v2.commandOutput({
@@ -52,8 +54,10 @@ export function CommandOutputPanel(props: {
     if (data === null) return <div className="text-muted-foreground italic">Loading output…</div>;
     return data.running ? null : <div className="text-muted-foreground italic">No output.</div>;
   }
+  const formatted = props.renderOutput?.(text) ?? null;
   // Parsed after the layout effect, the last hook, so the compiler caches it on text and theme.
-  const spans = terminalOutputSpans(text, TERMINAL_PALETTES[resolvedTheme]);
+  const spans =
+    formatted === null ? terminalOutputSpans(text, TERMINAL_PALETTES[resolvedTheme]) : [];
   return (
     <div className="space-y-1.5">
       {props.renderSummary?.(text)}
@@ -69,6 +73,7 @@ export function CommandOutputPanel(props: {
         }}
         className="max-h-80 overflow-auto text-muted-foreground"
       >
+        {formatted}
         {spans.map((span, index) =>
           span.style === null ? (
             span.text

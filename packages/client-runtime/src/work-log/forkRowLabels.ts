@@ -20,7 +20,7 @@ function trimTrailingSlashes(path: string): string {
 }
 
 /** `dir` as the row shows it: relative inside the workspace, else its last two folders. */
-function shortDirectory(dir: string, workspaceRoot: string | null | undefined): string {
+export function shortDirectory(dir: string, workspaceRoot: string | null | undefined): string {
   const path = trimTrailingSlashes(dir);
   const root = workspaceRoot ? trimTrailingSlashes(workspaceRoot) : null;
   if (root !== null && path === root) return "";

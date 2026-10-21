@@ -517,6 +517,7 @@ export function ThreadWorkLog(props: ThreadWorkLogProps) {
       renderReasoning={props.renderReasoning}
       onPressPreview={props.onPressPreview}
       themeAppearance={props.themeAppearance}
+      workspaceRoot={props.workspaceRoot}
     />
   );
 
@@ -1224,7 +1225,11 @@ const ThreadWorkLogRow = function ThreadWorkLogRow(
             ) : call ? (
               [
                 call.command && shownItem.type === "command_execution" ? (
-                  <ForkCommandSteps key="command" command={call.command} />
+                  <ForkCommandSteps
+                    key="command"
+                    command={call.command}
+                    workspaceRoot={props.workspaceRoot}
+                  />
                 ) : (
                   call.command
                 ),

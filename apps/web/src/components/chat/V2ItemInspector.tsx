@@ -28,7 +28,12 @@ import ChatMarkdown, { ChatMarkdownAssetImage } from "../ChatMarkdown";
 import { RenderErrorBoundary } from "../RenderErrorBoundary";
 import { CommandOutputPanel, useCommandOutputStreaming } from "./CommandOutputPanel";
 import { ForkInlineFileDiff } from "./forkCodeChunks";
-import { commandDurationMs, ForkCommandOutputSummary, ForkCommandSteps } from "./forkCommandRow";
+import {
+  commandDurationMs,
+  ForkCommandOutputSummary,
+  ForkCommandSteps,
+  forkFormattedCommandOutput,
+} from "./forkCommandRow";
 import { resolveExternalWebLinkHref } from "./externalLinkContextMenu";
 import type { ExpandedImagePreview } from "./ExpandedImagePreview";
 import { useReadableT3ToolArgs } from "./t3ToolArgs";
@@ -158,7 +163,7 @@ interface ToolOutputState {
   readonly onImageExpand?: ((preview: ExpandedImagePreview) => void) | undefined;
 }
 
-function ToolOutput(props: ToolOutputState) {
+function ToolOutput(props: ToolOutputState & { readonly formatted?: ReactNode }) {
   const images = props.images.map((resource) => (
     <ChatMarkdownAssetImage
       key={resource.index}
@@ -171,7 +176,7 @@ function ToolOutput(props: ToolOutputState) {
   ));
   const text = props.output ? (
     <div className="max-h-80 overflow-auto rounded-md border border-border/45 bg-muted/15 p-2 text-muted-foreground">
-      {props.output}
+      {props.formatted ?? props.output}
     </div>
   ) : props.pending ? (
     <div className="text-muted-foreground italic">Loading output…</div>
@@ -212,6 +217,7 @@ function ToolCallBody(
     readonly failed?: boolean;
     readonly exitCode?: number | undefined;
     readonly durationMs?: number | null;
+    readonly workspaceRoot?: string | undefined;
     /** Replaces the fetched output, e.g. with a command's live output. */
     readonly outputSlot?: ReactNode;
   },
@@ -225,6 +231,7 @@ function ToolCallBody(
           command={call.command}
           exitCode={props.exitCode}
           durationMs={props.durationMs ?? null}
+          workspaceRoot={props.workspaceRoot}
         />
       ) : null}
       {call.args ? (
@@ -247,7 +254,12 @@ function ToolCallBody(
             {call.command ? (
               <ForkCommandOutputSummary command={call.command} output={props.output} />
             ) : null}
-            <ToolOutput {...props} />
+            <ToolOutput
+              {...props}
+              formatted={
+                call.command && props.output ? forkFormattedCommandOutput(props.output) : null
+              }
+            />
           </>
         ))}
       {!call.command && props.exitCode !== undefined && props.exitCode !== 0 ? (
@@ -294,6 +306,7 @@ export const V2ItemInspector = memo(function V2ItemInspector(props: V2ItemInspec
           command={item.input}
           exitCode={item.exitCode}
           durationMs={commandDurationMs(item)}
+          workspaceRoot={props.workspaceRoot}
           failed={item.status === "failed"}
           {...outputState}
           onImageExpand={props.onImageExpand}
@@ -306,6 +319,7 @@ export const V2ItemInspector = memo(function V2ItemInspector(props: V2ItemInspec
                 renderSummary={(text) => (
                   <ForkCommandOutputSummary command={item.input} output={text} />
                 )}
+                renderOutput={forkFormattedCommandOutput}
               />
             ) : undefined
           }

@@ -2,8 +2,11 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   commandOutputFilters,
+  commandStepDirectory,
+  displayCommandSteps,
   formatTestSummary,
   leadingSetupCount,
+  parseGrepHits,
   parseTestSummary,
   splitCommandSteps,
 } from "./forkCommandSteps.ts";
@@ -105,5 +108,54 @@ describe("parseTestSummary", () => {
     ).toEqual({ failed: 1, passed: 2, skipped: 0 });
     expect(parseTestSummary("Tests passed\nall good")).toBeNull();
     expect(parseTestSummary("")).toBeNull();
+  });
+});
+
+describe("commandStepDirectory", () => {
+  it("reads the folder of a cd step, quoted or not, and nothing else", () => {
+    const [cd, quoted, other] = splitCommandSteps('cd /repo/src && cd "/a b" && cd x y');
+    expect(commandStepDirectory(cd!)).toBe("/repo/src");
+    expect(commandStepDirectory(quoted!)).toBe("/a b");
+    expect(commandStepDirectory(other!)).toBeNull();
+  });
+});
+
+describe("displayCommandSteps", () => {
+  it("turns a leading cd into a workspace-relative location and counts the setup after it", () => {
+    const shown = displayCommandSteps(
+      "cd /ws/services/orders && rm -rf x && ln -s a b && grep -n y src",
+      "/ws",
+    );
+    expect(shown.location).toBe("services/orders");
+    expect(shown.steps.map((step) => step.text.split(" ")[0])).toEqual(["rm", "ln", "grep"]);
+    expect(shown.setupCount).toBe(2);
+    expect(displayCommandSteps("cd /ws && make", "/ws").location).toBe("");
+    expect(displayCommandSteps("cd /ws/a", "/ws").steps).toHaveLength(1);
+  });
+});
+
+describe("parseGrepHits", () => {
+  it("splits grep -n hits and removes the indentation they share", () => {
+    expect(
+      parseGrepHits(
+        "441:        throw new UnconfirmedVoidError(\n784:    private async labelGone() {\n--\n",
+      ),
+    ).toEqual([
+      { location: "441:", text: "    throw new UnconfirmedVoidError(" },
+      { location: "784:", text: "private async labelGone() {" },
+    ]);
+  });
+
+  it("reads file paths and grep-of-grep locations", () => {
+    expect(parseGrepHits("src/a.ts:12:  a()\n10:4903-   b()")).toEqual([
+      { location: "src/a.ts:12:", text: "a()" },
+      { location: "10:4903-", text: " b()" },
+    ]);
+  });
+
+  it("leaves other output alone", () => {
+    expect(parseGrepHits("441: one line only")).toBeNull();
+    expect(parseGrepHits("12:30 lunch\nsee you then")).toBeNull();
+    expect(parseGrepHits("Tests  8 failed | 24 passed")).toBeNull();
   });
 });

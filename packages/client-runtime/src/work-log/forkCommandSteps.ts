@@ -1,3 +1,5 @@
+import { shortDirectory } from "./forkRowLabels.ts";
+
 /**
  * Reading aids for an expanded shell command row: its top-level steps, which
  * of them only set the stage, what its output was piped through, and the test
@@ -258,4 +260,63 @@ export function formatTestSummary(summary: TestSummary): string {
   ]
     .filter(Boolean)
     .join(" · ");
+}
+
+const CD_STEP = /^cd\s+(?:"([^"]+)"|'([^']+)'|(\S+))$/u;
+
+/** The folder a `cd` step moves into, or null for any other step. */
+export function commandStepDirectory(step: CommandStep): string | null {
+  const match = CD_STEP.exec(step.text);
+  return match ? (match[1] ?? match[2] ?? match[3] ?? null) : null;
+}
+
+/**
+ * What an expanded command row shows: a leading `cd` becomes `location`, the
+ * folder relative to the workspace ("" for the workspace itself or no `cd`),
+ * and the rest stay as steps with their leading setup counted for folding.
+ */
+export function displayCommandSteps(
+  command: string,
+  workspaceRoot: string | null | undefined,
+): { readonly location: string; readonly steps: CommandStep[]; readonly setupCount: number } {
+  const all = splitCommandSteps(command);
+  const directory = all.length > 1 ? commandStepDirectory(all[0]!) : null;
+  const steps = directory === null ? all : all.slice(1);
+  return {
+    location: directory === null ? "" : shortDirectory(directory, workspaceRoot),
+    steps,
+    setupCount: leadingSetupCount(steps),
+  };
+}
+
+export interface GrepHit {
+  /** `file:line:` or `line:` (with `-` for context lines), as grep printed it. */
+  readonly location: string;
+  /** The matched line with the indentation every hit shares removed. */
+  readonly text: string;
+}
+
+// `file:12:`, `12:`, or a grep of grep output such as `10:4903-`.
+const GREP_LINE = /^((?:[^\s:][^:]*:)?(?:\d+[:-])+)(.*)$/u;
+
+/**
+ * Output that reads as `grep -n` hits, split into locations and dedented
+ * lines; null when it is anything else. Group separators (`--`) are dropped.
+ */
+export function parseGrepHits(output: string): GrepHit[] | null {
+  const lines = output
+    .replace(ANSI, "")
+    .split("\n")
+    .filter((line) => line.trim() !== "" && line !== "--");
+  if (lines.length < 2) return null;
+  const hits = lines.flatMap((line) => {
+    const match = GREP_LINE.exec(line);
+    return match ? [{ location: match[1]!, text: match[2]! }] : [];
+  });
+  if (hits.length !== lines.length) return null;
+  const indent = Math.min(
+    ...hits.map((hit) => (hit.text.trim() === "" ? Infinity : /^\s*/u.exec(hit.text)![0].length)),
+  );
+  const shared = Number.isFinite(indent) ? indent : 0;
+  return hits.map((hit) => ({ location: hit.location, text: hit.text.slice(shared).trimEnd() }));
 }

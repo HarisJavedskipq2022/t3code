@@ -1,7 +1,7 @@
 import {
   commandOutputFilters,
+  displayCommandSteps,
   formatTestSummary,
-  leadingSetupCount,
   parseTestSummary,
   splitCommandSteps,
   type CommandStep,
@@ -45,15 +45,28 @@ function StepText(props: { readonly step: CommandStep }) {
   );
 }
 
-/** An expanded command as its steps, with the setup that leads up to the work folded. */
-export function ForkCommandSteps(props: { readonly command: string }) {
+/**
+ * An expanded command as its steps: a leading `cd` becomes the folder it runs
+ * in, and setup that leads up to the work folds into one line.
+ */
+export function ForkCommandSteps(props: {
+  readonly command: string;
+  readonly workspaceRoot?: string | null | undefined;
+}) {
   const [showSetup, setShowSetup] = useState(false);
-  const steps = splitCommandSteps(props.command);
-  const setupCount = leadingSetupCount(steps);
+  const { location, steps, setupCount } = displayCommandSteps(props.command, props.workspaceRoot);
   const foldable = setupCount >= FOLD_SETUP_FROM;
   const shown = foldable && !showSetup ? steps.slice(setupCount) : steps;
   return (
     <View className="gap-0.5">
+      {location !== "" ? (
+        <Text
+          numberOfLines={1}
+          className="font-mono text-2xs leading-normal text-foreground-subtle"
+        >
+          {`in ${location}`}
+        </Text>
+      ) : null}
       {foldable ? (
         <Pressable
           accessibilityRole="button"
@@ -61,7 +74,7 @@ export function ForkCommandSteps(props: { readonly command: string }) {
           onPress={() => setShowSetup(!showSetup)}
         >
           <Text className="font-mono text-2xs leading-normal text-foreground-subtle">
-            {`${showSetup ? "▾" : "▸"} ${setupCount} setup steps`}
+            {`${showSetup ? "▾" : "▸"} ${setupCount === 1 ? "1 setup step" : `${setupCount} setup steps`}`}
           </Text>
         </Pressable>
       ) : null}

@@ -1,16 +1,18 @@
 import {
   commandOutputFilters,
+  displayCommandSteps,
   formatTestSummary,
-  leadingSetupCount,
+  parseGrepHits,
   parseTestSummary,
   splitCommandSteps,
   type CommandStep,
+  type GrepHit,
 } from "@t3tools/client-runtime/work-log/fork-command-steps";
 import type { OrchestrationV2TurnItem } from "@t3tools/contracts";
 import { formatDuration } from "@t3tools/shared/orchestrationTiming";
 import * as DateTime from "effect/DateTime";
 import { CheckIcon, ChevronRightIcon, CopyIcon, FilterIcon } from "lucide-react";
-import { useState } from "react";
+import { Fragment, type ReactNode, useState } from "react";
 
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { cn } from "../../lib/utils";
@@ -48,54 +50,67 @@ function StepLine(props: { readonly step: CommandStep }) {
 }
 
 /**
- * An expanded command as its steps: setup that leads up to the work folds into
- * one line, `||` and `&` stay visible, and long inline scripts clip. A header
- * carries the duration, a non-zero exit code, and copy for the whole command.
+ * An expanded command as its steps: a leading `cd` becomes the folder it runs
+ * in, setup that leads up to the work folds into one line, `||` and `&` stay
+ * visible, and long inline scripts clip. The duration, a non-zero exit code
+ * and copy for the whole command sit in the header, or in the corner without one.
  */
 export function ForkCommandSteps(props: {
   readonly command: string;
   readonly exitCode: number | undefined;
   readonly durationMs: number | null;
+  readonly workspaceRoot?: string | undefined;
 }) {
   const [showSetup, setShowSetup] = useState(false);
   const { copyToClipboard, isCopied } = useCopyToClipboard({ target: "command" });
-  const steps = splitCommandSteps(props.command);
-  const setupCount = leadingSetupCount(steps);
-  const folded = setupCount >= FOLD_SETUP_FROM && !showSetup;
-  const shown = folded ? steps.slice(setupCount) : steps;
+  const { location, steps, setupCount } = displayCommandSteps(props.command, props.workspaceRoot);
+  const foldable = setupCount >= FOLD_SETUP_FROM;
+  const shown = foldable && !showSetup ? steps.slice(setupCount) : steps;
+  const hasHeader = location !== "" || foldable;
   const CopyStateIcon = isCopied ? CheckIcon : CopyIcon;
+  const meta = (
+    <div className="flex shrink-0 items-center gap-2 text-muted-foreground">
+      {props.durationMs !== null ? <span>{formatDuration(props.durationMs)}</span> : null}
+      {props.exitCode !== undefined && props.exitCode !== 0 ? (
+        <span className="text-destructive">exit {props.exitCode}</span>
+      ) : null}
+      <button
+        type="button"
+        className={toggleClassName}
+        aria-label={isCopied ? "Command copied" : "Copy command"}
+        onClick={() => copyToClipboard(props.command.trim(), undefined)}
+      >
+        <CopyStateIcon aria-hidden className="size-3" />
+      </button>
+    </div>
+  );
   return (
-    <div className="rounded-md border border-border/45 bg-muted/15 p-2">
-      <div className="mb-1 flex items-center gap-2 text-muted-foreground">
-        {setupCount >= FOLD_SETUP_FROM ? (
-          <button
-            type="button"
-            className={toggleClassName}
-            aria-expanded={showSetup}
-            onClick={() => setShowSetup(!showSetup)}
-          >
-            <ChevronRightIcon
-              aria-hidden
-              className={cn("size-3 transition-transform", showSetup && "rotate-90")}
-            />
-            {setupCount} setup steps
-          </button>
-        ) : null}
-        <span className="flex-1" />
-        {props.durationMs !== null ? <span>{formatDuration(props.durationMs)}</span> : null}
-        {props.exitCode !== undefined && props.exitCode !== 0 ? (
-          <span className="text-destructive">exit {props.exitCode}</span>
-        ) : null}
-        <button
-          type="button"
-          className={toggleClassName}
-          aria-label={isCopied ? "Command copied" : "Copy command"}
-          onClick={() => copyToClipboard(props.command.trim(), undefined)}
-        >
-          <CopyStateIcon aria-hidden className="size-3" />
-        </button>
-      </div>
-      <div className="space-y-0.5">
+    <div className="relative rounded-md border border-border/45 bg-muted/15 p-2">
+      {hasHeader ? (
+        <div className="mb-1 flex min-w-0 items-center gap-2 text-muted-foreground">
+          {location !== "" ? <span className="min-w-0 truncate">in {location}</span> : null}
+          {foldable ? (
+            <button
+              type="button"
+              className={cn(toggleClassName, "shrink-0")}
+              aria-expanded={showSetup}
+              onClick={() => setShowSetup(!showSetup)}
+            >
+              <ChevronRightIcon
+                aria-hidden
+                className={cn("size-3 transition-transform", showSetup && "rotate-90")}
+              />
+              {setupCount === 1 ? "1 setup step" : `${setupCount} setup steps`}
+            </button>
+          ) : null}
+          <span className="flex-1" />
+          {meta}
+        </div>
+      ) : (
+        <div className="absolute top-2 right-2">{meta}</div>
+      )}
+      {/* Without a header the meta sits in the corner, so the steps leave it room. */}
+      <div className={cn("space-y-0.5", !hasHeader && "pe-16")}>
         {shown.map((step, index) => (
           // Steps come from a fixed string and never reorder.
           // oxlint-disable-next-line react/no-array-index-key
@@ -104,6 +119,28 @@ export function ForkCommandSteps(props: {
       </div>
     </div>
   );
+}
+
+/** `grep -n` output as a column of locations beside the dedented lines they point at. */
+export function ForkGrepHits(props: { readonly hits: ReadonlyArray<GrepHit> }) {
+  return (
+    <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3">
+      {props.hits.map((hit, index) => (
+        // Hits come from fixed output and never reorder.
+        // oxlint-disable-next-line react/no-array-index-key
+        <Fragment key={index}>
+          <span className="text-right text-muted-foreground/60 tabular-nums">{hit.location}</span>
+          <span className="text-foreground/85">{hit.text}</span>
+        </Fragment>
+      ))}
+    </div>
+  );
+}
+
+/** The output formatted for reading when it is grep hits, else null to show it as is. */
+export function forkFormattedCommandOutput(text: string): ReactNode {
+  const hits = parseGrepHits(text);
+  return hits === null ? null : <ForkGrepHits hits={hits} />;
 }
 
 /**
