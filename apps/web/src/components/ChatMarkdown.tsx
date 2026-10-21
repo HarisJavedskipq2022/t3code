@@ -229,6 +229,7 @@ import {
 import { observeResize } from "~/lib/observeResize";
 import { useOpenLink } from "../browser/useOpenLink";
 import { writeTextToClipboard } from "../hooks/useCopyToClipboard";
+import { ForkCodeLines } from "./chat/forkCodeLines";
 import { isPreviewAvailableFor } from "../browser/previewRuntime";
 import {
   isBrowserPreviewFile,
@@ -1042,7 +1043,9 @@ function MarkdownCodeBlock({
         </span>
       }
     >
-      {children}
+      <ForkCodeLines code={code} isStreaming={isStreaming}>
+        {children}
+      </ForkCodeLines>
     </MarkdownCodeBlockFrame>
   );
 }

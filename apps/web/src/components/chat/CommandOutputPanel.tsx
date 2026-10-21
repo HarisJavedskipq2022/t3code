@@ -1,6 +1,6 @@
 import type { EnvironmentId, ThreadId, TurnItemId } from "@t3tools/contracts";
 import { TERMINAL_PALETTES, terminalOutputSpans } from "@t3tools/shared/terminalOutput";
-import { useLayoutEffect, useRef } from "react";
+import { type ReactNode, useLayoutEffect, useRef } from "react";
 
 import { useTheme } from "../../hooks/useTheme";
 import { useServerConfigs } from "../../state/entities";
@@ -26,6 +26,8 @@ export function CommandOutputPanel(props: {
   readonly environmentId: EnvironmentId;
   readonly threadId: ThreadId;
   readonly itemId: TurnItemId;
+  /** Shown above the output, from its text. */
+  readonly renderSummary?: (text: string) => ReactNode;
 }) {
   const { data, error } = useEnvironmentQuery(
     orchestrationEnvironment.v2.commandOutput({
@@ -53,7 +55,8 @@ export function CommandOutputPanel(props: {
   // Parsed after the layout effect, the last hook, so the compiler caches it on text and theme.
   const spans = terminalOutputSpans(text, TERMINAL_PALETTES[resolvedTheme]);
   return (
-    <div>
+    <div className="space-y-1.5">
+      {props.renderSummary?.(text)}
       {data?.output.truncated ? (
         <div className="text-muted-foreground italic">Earlier output not shown</div>
       ) : null}

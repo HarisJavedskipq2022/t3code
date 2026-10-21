@@ -10,6 +10,7 @@ import {
 } from "./work-log-layout";
 import { QuestionAnswerHistory } from "./QuestionAnswerHistory";
 import { ThreadCommandOutput, useCommandOutputStreaming } from "./thread-command-output";
+import { ForkCommandOutputSummary, ForkCommandSteps } from "./forkCommandSteps";
 import {
   getQuestionAnswerPreview,
   hasQuestionAnswer,
@@ -1208,7 +1209,11 @@ const ThreadWorkLogRow = function ThreadWorkLogRow(
               props.renderReasoning(reasoning.text)
             ) : call ? (
               [
-                call.command,
+                call.command && shownItem.type === "command_execution" ? (
+                  <ForkCommandSteps key="command" command={call.command} />
+                ) : (
+                  call.command
+                ),
                 ...(call.args ?? []).map(([key, value]) =>
                   key === "code" &&
                   shownItem.type === "dynamic_tool" &&
@@ -1244,6 +1249,9 @@ const ThreadWorkLogRow = function ThreadWorkLogRow(
                 {fullDetail}
               </Text>
             ) : null}
+            {call?.command && fetchedOutput ? (
+              <ForkCommandOutputSummary command={call.command} output={fetchedOutput} />
+            ) : null}
             {fetchedOutput ? (
               <Text
                 selectable
@@ -1264,6 +1272,11 @@ const ThreadWorkLogRow = function ThreadWorkLogRow(
                 threadId={row.projectedItem.sourceThreadId}
                 itemId={row.projectedItem.sourceItemId}
                 themeAppearance={props.themeAppearance}
+                renderSummary={(text) =>
+                  call?.command ? (
+                    <ForkCommandOutputSummary command={call.command} output={text} />
+                  ) : null
+                }
               />
               {exitLine}
             </>

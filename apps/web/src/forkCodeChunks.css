@@ -1,0 +1,21 @@
+/* Fork: line numbers and clipping for markdown code blocks (see chat/forkCodeLines.tsx).
+   The gutter is generated content, so selecting and copying code leaves it out. */
+[data-fork-line-numbers] .chat-markdown-shiki .shiki code {
+  counter-reset: fork-line;
+}
+
+[data-fork-line-numbers] .chat-markdown-shiki .shiki .line::before {
+  counter-increment: fork-line;
+  content: counter(fork-line);
+  display: inline-block;
+  width: 3ch;
+  margin-right: 1.25ch;
+  text-align: right;
+  color: color-mix(in srgb, var(--muted-foreground) 55%, transparent);
+  user-select: none;
+}
+
+[data-fork-clamped] pre {
+  max-height: 22lh;
+  overflow: hidden;
+}

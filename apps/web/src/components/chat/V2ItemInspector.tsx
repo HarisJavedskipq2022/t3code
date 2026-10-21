@@ -27,9 +27,10 @@ import { Button } from "../ui/button";
 import ChatMarkdown, { ChatMarkdownAssetImage } from "../ChatMarkdown";
 import { RenderErrorBoundary } from "../RenderErrorBoundary";
 import { CommandOutputPanel, useCommandOutputStreaming } from "./CommandOutputPanel";
+import { ForkInlineFileDiff } from "./forkCodeChunks";
+import { commandDurationMs, ForkCommandOutputSummary, ForkCommandSteps } from "./forkCommandRow";
 import { resolveExternalWebLinkHref } from "./externalLinkContextMenu";
 import type { ExpandedImagePreview } from "./ExpandedImagePreview";
-import { ShellCommandBlock } from "./ShellCommandBlock";
 import { useReadableT3ToolArgs } from "./t3ToolArgs";
 import { parseToolError, ToolCallArgs, ToolCallError } from "./toolCallDetails";
 
@@ -210,6 +211,7 @@ function ToolCallBody(
     /** The call failed, so an error the provider returned in place of output gets its own box. */
     readonly failed?: boolean;
     readonly exitCode?: number | undefined;
+    readonly durationMs?: number | null;
     /** Replaces the fetched output, e.g. with a command's live output. */
     readonly outputSlot?: ReactNode;
   },
@@ -218,7 +220,13 @@ function ToolCallBody(
   const error = props.failed && props.output ? parseToolError(props.output) : null;
   return (
     <div className={cn("space-y-1.5", monoClassName)}>
-      {call.command ? <ShellCommandBlock command={call.command} /> : null}
+      {call.command ? (
+        <ForkCommandSteps
+          command={call.command}
+          exitCode={props.exitCode}
+          durationMs={props.durationMs ?? null}
+        />
+      ) : null}
       {call.args ? (
         <ToolCallArgs
           lines={call.args}
@@ -231,8 +239,18 @@ function ToolCallBody(
         />
       ) : null}
       {call.argsText ? <StructuredValue value={call.argsText} highlightJson /> : null}
-      {props.outputSlot ?? (error ? <ToolCallError error={error} /> : <ToolOutput {...props} />)}
-      {props.exitCode !== undefined && props.exitCode !== 0 ? (
+      {props.outputSlot ??
+        (error ? (
+          <ToolCallError error={error} />
+        ) : (
+          <>
+            {call.command ? (
+              <ForkCommandOutputSummary command={call.command} output={props.output} />
+            ) : null}
+            <ToolOutput {...props} />
+          </>
+        ))}
+      {!call.command && props.exitCode !== undefined && props.exitCode !== 0 ? (
         <div className="text-destructive">exit {props.exitCode}</div>
       ) : null}
     </div>
@@ -275,6 +293,7 @@ export const V2ItemInspector = memo(function V2ItemInspector(props: V2ItemInspec
         <ToolCallBody
           command={item.input}
           exitCode={item.exitCode}
+          durationMs={commandDurationMs(item)}
           failed={item.status === "failed"}
           {...outputState}
           onImageExpand={props.onImageExpand}
@@ -284,6 +303,9 @@ export const V2ItemInspector = memo(function V2ItemInspector(props: V2ItemInspec
                 environmentId={props.environmentId}
                 threadId={props.projectedItem.sourceThreadId}
                 itemId={props.projectedItem.sourceItemId}
+                renderSummary={(text) => (
+                  <ForkCommandOutputSummary command={item.input} output={text} />
+                )}
               />
             ) : undefined
           }
@@ -314,7 +336,13 @@ export const V2ItemInspector = memo(function V2ItemInspector(props: V2ItemInspec
           </div>
           {item.status === "failed" && item.diffStr?.trim() ? (
             <StructuredValue value={item.diffStr} />
-          ) : null}
+          ) : (
+            <ForkInlineFileDiff
+              fileName={item.fileName}
+              diffStr={item.diffStr}
+              cacheKey={`turn-item:${item.id}`}
+            />
+          )}
           {item.changes !== undefined && item.changes.length > 0 ? (
             <ul className="space-y-1 font-mono text-muted-foreground">
               {item.changes.map((change) => (

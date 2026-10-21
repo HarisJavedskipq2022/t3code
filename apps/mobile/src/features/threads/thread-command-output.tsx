@@ -29,6 +29,8 @@ export function ThreadCommandOutput(props: {
   readonly threadId: ThreadId;
   readonly itemId: TurnItemId;
   readonly themeAppearance: "light" | "dark";
+  /** Shown above the output, from its text. */
+  readonly renderSummary?: (text: string) => React.ReactNode;
 }) {
   const { data, error } = useEnvironmentQuery(
     orchestrationEnvironment.v2.commandOutput({
@@ -60,6 +62,7 @@ export function ThreadCommandOutput(props: {
   }
   return (
     <View className="pt-1.5">
+      {props.renderSummary?.(text)}
       {data?.output.truncated ? (
         <Text className="pb-0.5 text-3xs text-foreground-subtle">Earlier output not shown</Text>
       ) : null}

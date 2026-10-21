@@ -351,6 +351,10 @@
       "types": "./src/work-log/commandLabel.ts",
       "default": "./src/work-log/commandLabel.ts"
     },
+    "./work-log/fork-command-steps": {
+      "types": "./src/work-log/forkCommandSteps.ts",
+      "default": "./src/work-log/forkCommandSteps.ts"
+    },
     "./work-log/fork-row-labels": {
       "types": "./src/work-log/forkRowLabels.ts",
       "default": "./src/work-log/forkRowLabels.ts"
