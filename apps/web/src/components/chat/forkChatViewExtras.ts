@@ -1,8 +1,6 @@
-import { describeAgentStep } from "@t3tools/client-runtime/state/agent-step";
 import { isAtomCommandInterrupted } from "@t3tools/client-runtime/state/runtime";
 import type {
   EnvironmentId,
-  OrchestrationV2ProjectedTurnItem,
   ProjectScript,
   RunId,
   ScopedThreadRef,
@@ -32,7 +30,8 @@ export function useForkChatViewExtras(input: {
   paintOnlyDisplayedTimeline: boolean;
   activeWorkStartedAt: string | null;
   activeRunId: RunId | null;
-  turnItems: ReadonlyArray<OrchestrationV2ProjectedTurnItem> | null | undefined;
+  /** The thread whose live turn items name the working step. */
+  threadDetailRef: ScopedThreadRef | null;
   setThreadError: (threadId: ThreadId | null, error: string | null) => void;
 }) {
   const { environmentId, activeThreadRef, setThreadError } = input;
@@ -67,16 +66,20 @@ export function useForkChatViewExtras(input: {
     }
   };
 
-  const activeRunStep =
-    input.activeRunId === null ? null : describeAgentStep(input.turnItems ?? [], input.activeRunId);
-  const workingStep = input.isPreparingWorktree
-    ? "Setting up worktree"
-    : input.isCompacting
-      ? "Compacting conversation"
-      : (activeRunStep ?? "Working");
+  // ChatView reads quiet turn items without streamed text, so the row reads the run's live
+  // items itself unless a fixed step applies; a text delta re-renders only the row.
   const composerWorkingStatus =
     input.isWorking && !input.paintOnlyDisplayedTimeline
-      ? { step: workingStep, startedAt: input.activeWorkStartedAt }
+      ? {
+          step: input.isPreparingWorktree
+            ? "Setting up worktree"
+            : input.isCompacting
+              ? "Compacting conversation"
+              : null,
+          threadRef: input.threadDetailRef,
+          runId: input.activeRunId,
+          startedAt: input.activeWorkStartedAt,
+        }
       : null;
 
   const addVetSurface = () => {

@@ -1,5 +1,5 @@
 import { CommandId, type ThreadId, type ThreadLinkedPullRequest } from "@t3tools/contracts";
-import { legacyThreadPullRequestKey } from "@t3tools/shared/threadPullRequests";
+import { legacyThreadPullRequestKey } from "../sourceControl/threadPullRequests.ts";
 import * as Effect from "effect/Effect";
 
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";

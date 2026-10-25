@@ -1,4 +1,4 @@
-import { StackActions, useNavigation } from "@react-navigation/native";
+import { useNavigation } from "@react-navigation/native";
 import { isJiraConfigured } from "@t3tools/client-runtime/jira-ticket-draft";
 import type { EnvironmentId } from "@t3tools/contracts";
 import { Keyboard } from "react-native";
@@ -26,7 +26,7 @@ export function StartFromTicketLink(props: {
       maxWidth={260}
       onPress={() => {
         Keyboard.dismiss();
-        navigation.dispatch(StackActions.push("NewTaskJira"));
+        navigation.navigate("NewTaskJira");
       }}
     />
   );

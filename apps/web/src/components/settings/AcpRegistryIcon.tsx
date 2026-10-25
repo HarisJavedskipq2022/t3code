@@ -43,8 +43,7 @@ export function loadCachedAcpRegistryIcon(iconUrl: string): Promise<Blob> {
       try {
         cache = await caches.open(ACP_REGISTRY_ICON_CACHE);
       } catch {
-        // Some privacy modes expose CacheStorage but reject access. Icons can
-        // still load normally from the allowlisted registry CDN.
+        // Privacy modes may expose CacheStorage but reject access; icons still load from the allowlisted CDN.
       }
     }
     if (cache !== null) {
@@ -90,10 +89,7 @@ export function AcpRegistryAgentIcon({
     readonly status: "loading" | "loaded" | "failed";
   } | null>(null);
   const currentImage = image?.iconUrl === iconUrl ? image : null;
-  // Render only after the load pipeline resolves: the validated blob when the
-  // fetch succeeds, or the raw allowlisted CDN URL when it fails (the official
-  // CDN serves no CORS headers, so the validating fetch is often blocked in
-  // cross-origin browser contexts while native <img> loading still works).
+  // The CDN lacks CORS headers; native img loading can succeed after a validating fetch fails.
   // A local agent's inline icon needs no fetch and is tinted the same way.
   const source = inlineIcon ?? currentImage?.source ?? null;
   const status = inlineIcon === null ? (currentImage?.status ?? "loading") : "loaded";
@@ -128,9 +124,8 @@ export function AcpRegistryAgentIcon({
         className,
       )}
     >
-      {/* Recolor their alpha rather than
-          inverting RGB values; external images cannot inherit currentColor.
-          A local SVG filter also works when CDN CORS prevents CSS masks. */}
+      {/* Recolor alpha because external images cannot inherit currentColor; local SVG filters work despite
+       * CDN mask CORS restrictions. */}
       <svg aria-hidden className="pointer-events-none absolute size-0" focusable="false">
         <defs>
           <filter id={colorFilterId} colorInterpolationFilters="sRGB">

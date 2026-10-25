@@ -1,14 +1,33 @@
+import { describeAgentStep } from "@t3tools/client-runtime/state/agent-step";
+import type { RunId, ScopedThreadRef } from "@t3tools/contracts";
 import { CircleDashedIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
+import { useThreadVisibleTurnItems } from "../../state/entities";
 import { ComposerWorkingRow } from "./ComposerActivityStatus";
+
+type ComposerWorkingStatus = {
+  /** A step that names itself, such as worktree setup; null to read it from the run's items. */
+  readonly step: string | null;
+  readonly threadRef: ScopedThreadRef | null;
+  readonly runId: RunId | null;
+  readonly startedAt: string | null;
+};
 
 export interface ComposerForkProps {
   /** What the agent is doing while a turn runs; null when it is idle. */
-  workingStatus?: {
-    readonly step: string;
-    readonly startedAt: string | null;
-  } | null;
+  workingStatus?: ComposerWorkingStatus | null;
+}
+
+/** Subscribes to the live turn items here, so streamed text re-renders this row alone. */
+function ForkComposerWorkingRow({ status }: { readonly status: ComposerWorkingStatus }) {
+  const reads = status.step === null && status.runId !== null;
+  const items = useThreadVisibleTurnItems(reads ? status.threadRef : null);
+  const step =
+    status.step ??
+    (status.runId === null ? null : describeAgentStep(items, status.runId)) ??
+    "Working";
+  return <ComposerWorkingRow step={step} startedAt={status.startedAt} />;
 }
 
 /**
@@ -39,9 +58,7 @@ export function composerWorking(input: {
 }) {
   // An agent waiting on an approval or an answer is not working; the drawer says so.
   const status = input.hasBlockingTopDrawer ? null : (input.workingStatus ?? null);
-  const row = status ? (
-    <ComposerWorkingRow step={status.step} startedAt={status.startedAt} />
-  ) : null;
+  const row = status ? <ForkComposerWorkingRow status={status} /> : null;
   return {
     row,
     inline: input.inlineTasksBadge ?? row,

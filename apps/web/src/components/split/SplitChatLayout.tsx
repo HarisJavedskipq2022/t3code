@@ -6,6 +6,7 @@ import * as Schema from "effect/Schema";
 import {
   type CSSProperties,
   type ReactNode,
+  use,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -29,6 +30,7 @@ import { primaryServerKeybindingsAtom } from "../../state/server";
 import { useEnvironmentShellStatus } from "../../state/shell";
 import { buildThreadRouteParams, isThreadRouteSnapshotAuthoritative } from "../../threadRoutes";
 import ChatView from "../ChatView";
+import { BackgroundThreadContext } from "../chat/backgroundThread";
 import type { ChatComposerHandle } from "../chat/ChatComposer";
 import { SPLIT_PANE_COLOR, type SplitPaneEmbedding } from "./SplitPaneHeader";
 import {
@@ -287,6 +289,7 @@ function useSplitShortcuts(input: {
 }) {
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const threads = useThreadShells();
+  const backgroundThread = use(BackgroundThreadContext);
   const latest = useRef(input);
   const latestThreads = useRef(threads);
   useLayoutEffect(() => {
@@ -294,6 +297,7 @@ function useSplitShortcuts(input: {
     latestThreads.current = threads;
   });
   useEffect(() => {
+    if (backgroundThread) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
       const command = resolveShortcutCommand(event, keybindings, {
@@ -338,5 +342,5 @@ function useSplitShortcuts(input: {
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [keybindings]);
+  }, [backgroundThread, keybindings]);
 }

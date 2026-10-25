@@ -1,5 +1,5 @@
 import type { CommandId, OrchestrationV2AppThread } from "@t3tools/contracts";
-import { threadPullRequestsOf } from "@t3tools/shared/threadPullRequests";
+import { threadPullRequestsOf } from "../sourceControl/threadPullRequests.ts";
 
 import type { PendingOrchestrationEffectV2 } from "../orchestration-v2/EffectOutbox.ts";
 
