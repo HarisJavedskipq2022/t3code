@@ -65,8 +65,6 @@ export function makeSubagentChildThread(input: {
     historyOrigin: undefined,
     providerInstanceId: input.providerInstanceId,
     modelSelection: input.modelSelection,
-    // A sidekick must not lead a Fusion pairing of its own.
-    fusion: null,
     activeProviderThreadId: input.activeProviderThreadId,
     lineage: {
       parentThreadId: input.parentThread.id,

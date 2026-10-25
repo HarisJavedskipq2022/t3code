@@ -35,7 +35,6 @@ import {
   ScheduledTaskId,
   ThreadId,
   TrimmedNonEmptyString,
-  TrimmedString,
   TurnItemId,
 } from "./baseSchemas.ts";
 import { ChatAttachment } from "./chatAttachment.ts";
@@ -371,45 +370,6 @@ export const OrchestrationV2LimitRecoveryUpdate = Schema.Struct({
 );
 export type OrchestrationV2LimitRecoveryUpdate = typeof OrchestrationV2LimitRecoveryUpdate.Type;
 
-/** A sidekick the user named for one kind of work; the lead sends it the steps that fit. */
-export const OrchestrationV2FusionRole = Schema.Struct({
-  name: TrimmedNonEmptyString.check(Schema.isMaxLength(40)),
-  /** The user's own words for which steps belong here; may be empty. */
-  useFor: TrimmedString.check(Schema.isMaxLength(300)),
-  sidekick: ModelSelection,
-});
-export type OrchestrationV2FusionRole = typeof OrchestrationV2FusionRole.Type;
-
-export const MAX_FUSION_ROLES = 3;
-
-/**
- * Fusion pairing: the thread's own model leads (plans and reviews) while
- * persistent sidekick children write the code. `sidekick` takes every step no
- * role fits. Older servers and clients drop `roles` and keep the default.
- */
-export const OrchestrationV2ThreadFusion = Schema.Struct({
-  sidekick: ModelSelection,
-  roles: Schema.optionalKey(
-    Schema.Array(OrchestrationV2FusionRole).check(Schema.isMaxLength(MAX_FUSION_ROLES)),
-  ),
-}).check(
-  Schema.makeFilter((fusion) => {
-    const roles = fusion.roles ?? [];
-    // A sidekick thread is recognised by its instance and model, so each must be distinct.
-    const models = new Set(
-      [fusion.sidekick, ...roles.map((role) => role.sidekick)].map(
-        (selection) => `${selection.instanceId}\u0000${selection.model}`,
-      ),
-    );
-    const names = new Set(roles.map((role) => role.name.toLowerCase()));
-    return (
-      (models.size === roles.length + 1 && names.size === roles.length) ||
-      "Fusion sidekicks need distinct models and role names."
-    );
-  }),
-);
-export type OrchestrationV2ThreadFusion = typeof OrchestrationV2ThreadFusion.Type;
-
 export const OrchestrationV2AppThread = Schema.Struct({
   ...OrchestrationV2CreationFields,
   id: ThreadId,
@@ -419,8 +379,6 @@ export const OrchestrationV2AppThread = Schema.Struct({
   modelSelection: ModelSelection,
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode,
-  /** Optional so threads from before Fusion still decode. */
-  fusion: Schema.optional(Schema.NullOr(OrchestrationV2ThreadFusion)),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
   linkedPullRequest: Schema.optional(Schema.NullOr(ThreadLinkedPullRequest)),
@@ -1668,6 +1626,7 @@ export const OrchestrationV2DomainEvent = Schema.Union([
       "thread.pull-request-synced",
       "thread.runtime-mode-updated",
       "thread.interaction-mode-updated",
+      // No longer emitted (Fusion was removed); stored events still replay as thread snapshots.
       "thread.fusion-updated",
       "thread.model-selection-updated",
       "thread.provider-switched",
@@ -1857,8 +1816,6 @@ export const OrchestrationV2ThreadShell = Schema.Struct({
   modelSelection: ModelSelection,
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode,
-  /** Optional so threads from before Fusion still decode. */
-  fusion: Schema.optional(Schema.NullOr(OrchestrationV2ThreadFusion)),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
   linkedPullRequest: Schema.optional(Schema.NullOr(ThreadLinkedPullRequest)),
@@ -2483,6 +2440,7 @@ export const OrchestrationV2DomainEventJson = Schema.Union([
       "thread.metadata-updated",
       "thread.runtime-mode-updated",
       "thread.interaction-mode-updated",
+      // No longer emitted (Fusion was removed); stored events still replay as thread snapshots.
       "thread.fusion-updated",
       "thread.model-selection-updated",
       "thread.provider-switched",
@@ -2848,8 +2806,6 @@ export const OrchestrationV2Command = Schema.Union([
     attachments: Schema.Array(ChatAttachment),
     titleSeed: Schema.optional(TrimmedNonEmptyString),
     modelSelection: Schema.optional(ModelSelection),
-    /** Fusion pairing for this and later runs; null turns it off, absent keeps it. */
-    fusion: Schema.optional(Schema.NullOr(OrchestrationV2ThreadFusion)),
     sourcePlanRef: Schema.optional(Schema.Struct({ threadId: ThreadId, planId: PlanId })),
     restartContinuationOfRunId: Schema.optional(RunId),
     usageLimitContinuationOfRunId: Schema.optional(RunId),
@@ -3217,7 +3173,6 @@ export const OrchestrationV2ThreadLaunchInput = Schema.Struct({
   modelSelection: ModelSelection,
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode,
-  fusion: Schema.optional(Schema.NullOr(OrchestrationV2ThreadFusion)),
   workspaceStrategy: OrchestrationV2ThreadLaunchWorkspaceStrategy,
   linkedTicket: Schema.optional(ThreadLinkedTicket),
   initialMessage: Schema.optional(

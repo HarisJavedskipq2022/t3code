@@ -394,6 +394,90 @@ layer("OrchestrationEventStore", (it) => {
       );
     }),
   );
+  it.effect("replays a stored Fusion pairing event as a plain thread snapshot", () =>
+    Effect.gen(function* () {
+      const eventStore = yield* OrchestrationEventStore.OrchestrationEventStore;
+      const sql = yield* SqlClient.SqlClient;
+      const threadId = ThreadId.make("thread-legacy-fusion");
+      const providerInstanceId = ProviderInstanceId.make("codex");
+      const occurredAt = DateTime.makeUnsafe("2026-10-13T00:00:00.000Z");
+      const baselineSequence = yield* eventStore.latestApplicationSequence;
+      yield* eventStore.appendAgentEvents({
+        commandId: CommandId.make("command-legacy-fusion"),
+        events: [
+          {
+            id: EventId.make("event-legacy-fusion-created"),
+            type: "thread.created",
+            threadId,
+            providerInstanceId,
+            occurredAt,
+            payload: {
+              id: threadId,
+              projectId: ProjectId.make("project-legacy-fusion"),
+              title: "Fusion lead",
+              providerInstanceId,
+              modelSelection: { instanceId: providerInstanceId, model: "gpt-5.4" },
+              runtimeMode: "full-access",
+              interactionMode: "default",
+              branch: null,
+              worktreePath: null,
+              activeProviderThreadId: null,
+              lineage: { rootThreadId: threadId, parentThreadId: null, relationshipToParent: null },
+              forkedFrom: null,
+              createdBy: "user",
+              creationSource: "web",
+              createdAt: occurredAt,
+              updatedAt: occurredAt,
+              archivedAt: null,
+              settledOverride: null,
+              settledAt: null,
+              lastVisitedAt: null,
+              deletedAt: null,
+            },
+          },
+        ],
+      });
+      const [created] = yield* sql<{
+        readonly stream_version: number;
+        readonly payload_json: string;
+        readonly metadata_json: string;
+      }>`
+        SELECT stream_version, payload_json, metadata_json FROM orchestration_events
+        WHERE event_id = 'event-legacy-fusion-created'
+      `;
+      // Written the way Fusion stored it: the whole thread, with its pairing.
+      const fusionPayload: Record<string, unknown> = {
+        ...JSON.parse(created!.payload_json),
+        fusion: { sidekick: { instanceId: "codex", model: "gpt-5.1-codex-mini" } },
+      };
+      const [fusionRow] = yield* sql<{ readonly sequence: number }>`
+        INSERT INTO orchestration_events (
+          event_id, aggregate_kind, stream_id, stream_version, event_type,
+          occurred_at, actor_kind, payload_json, metadata_json, application_event_version
+        ) VALUES (
+          'event-legacy-fusion-updated', 'thread', ${threadId}, ${created!.stream_version + 1},
+          'thread.fusion-updated', '2026-10-13T00:01:00.000Z', 'server',
+          ${JSON.stringify(fusionPayload)}, ${created!.metadata_json}, 2
+        ) RETURNING sequence
+      `;
+
+      const replay = yield* eventStore
+        .readApplicationEvents({
+          afterSequence: baselineSequence,
+          throughSequence: fusionRow!.sequence,
+        })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk)),
+        );
+      const legacy = replay.at(-1);
+      assert(
+        legacy !== undefined && "event" in legacy && legacy.event.type === "thread.fusion-updated",
+      );
+      assert.equal(legacy.event.payload.title, "Fusion lead");
+      assert.isFalse("fusion" in legacy.event.payload);
+    }),
+  );
   it.effect("measures only a bounded thread replay before decoding its payloads", () =>
     Effect.gen(function* () {
       const store = yield* OrchestrationEventStore.OrchestrationEventStore;

@@ -29,7 +29,6 @@ import { withWorkspaceLease } from "../workspace/workspaceLease.ts";
 import * as GitWorkflowService from "../git/GitWorkflowService.ts";
 import * as ProjectService from "../project/ProjectService.ts";
 import * as ProviderAuthService from "../provider/ProviderAuthService.ts";
-import { fusionTurnInstructions } from "./Fusion.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import { makeIsManagedWorktreePath } from "../worktreesDirectory.ts";
 import * as EventSink from "./EventSink.ts";
@@ -1167,13 +1166,7 @@ export const layer: Layer.Layer<
           });
           if (!(yield* isCurrentAttemptInStatus("running"))) return;
           const start = compact ? session.compactThread! : session.startTurn;
-          // Fusion is restated each lead turn, with the sidekick it should keep using.
-          const fusionInstructions = fusionTurnInstructions({
-            thread: projection.thread,
-            subagents: projection.subagents,
-            compact,
-          });
-          const context = [delivery.context, restartNote, fusionInstructions]
+          const context = [delivery.context, restartNote]
             .filter((part) => part !== "")
             .join("\n\n");
           const { restartContinuationOfRunId: _resumedRunId, ...promptedInput } = turnInput;
@@ -1221,14 +1214,11 @@ export const layer: Layer.Layer<
               }),
         ),
       );
-      // A Fusion lead's turn always carries its instructions, so it needs the
-      // delivery wrapper even when there is no handoff context.
       const deliverySession =
         effectiveHandoffs.length === 0 &&
         missedItems.length === 0 &&
         restartNote === "" &&
-        !noteContinuation &&
-        (projection.thread.fusion ?? null) === null
+        !noteContinuation
           ? session
           : makeDeliverySession(session, startWithHandoffs);
       return runExecution.startRootRun({

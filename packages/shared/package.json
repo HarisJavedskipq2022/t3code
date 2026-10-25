@@ -43,10 +43,6 @@
       "types": "./src/projectFavicon.ts",
       "import": "./src/projectFavicon.ts"
     },
-    "./fusion": {
-      "types": "./src/fusion.ts",
-      "import": "./src/fusion.ts"
-    },
     "./model": {
       "types": "./src/model.ts",
       "import": "./src/model.ts"

@@ -60,7 +60,7 @@ export function useSubagentThreadDeletion(input: {
         )
       : rows;
 
-  // Fusion replaces a stopped sidekick instead of reusing it, so deleting one is safe.
+  // Only a stopped child: a running one is still doing its parent's work.
   const canDelete = (
     agent: { readonly origin: string; readonly status: string } | null | undefined,
     hasThread: boolean,

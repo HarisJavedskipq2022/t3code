@@ -14,7 +14,6 @@ import {
   OrchestrationV2ThreadHistoryPage,
   OrchestrationV2TurnItem,
   OrchestrationV2TurnItemJson,
-  OrchestrationV2ThreadFusion,
 } from "./orchestrationV2.ts";
 
 const now = DateTime.makeUnsafe("2026-04-20T00:00:00.000Z");
@@ -570,37 +569,5 @@ describe("latestProviderTurnForAttempt", () => {
     ];
     expect(latestProviderTurnForAttempt(turns, RunAttemptId.make("goal-attempt"))?.id).toBe("last");
     expect(latestProviderTurnForAttempt(turns, null)).toBeUndefined();
-  });
-});
-
-describe("OrchestrationV2ThreadFusion", () => {
-  const decode = Schema.decodeUnknownExit(OrchestrationV2ThreadFusion);
-  const sidekick = { instanceId: "codex", model: "gpt-6-luna" };
-  const role = (name: string, model: string) => ({
-    name,
-    useFor: " React and CSS ",
-    sidekick: { instanceId: "codex", model },
-  });
-
-  it("decodes a pairing from before roles, and trims roles", () => {
-    expect(decode({ sidekick })._tag).toBe("Success");
-    const decoded = Schema.decodeUnknownSync(OrchestrationV2ThreadFusion)({
-      sidekick,
-      roles: [role(" ui ", "gpt-6-mini")],
-    });
-    expect(decoded.roles?.[0]).toMatchObject({ name: "ui", useFor: "React and CSS" });
-  });
-
-  it("rejects sidekicks that share a model or a role name, and too many roles", () => {
-    expect(decode({ sidekick, roles: [role("ui", "gpt-6-luna")] })._tag).toBe("Failure");
-    expect(
-      decode({ sidekick, roles: [role("ui", "gpt-6-mini"), role("UI", "gpt-6-sol")] })._tag,
-    ).toBe("Failure");
-    expect(
-      decode({
-        sidekick,
-        roles: [role("a", "m1"), role("b", "m2"), role("c", "m3"), role("d", "m4")],
-      })._tag,
-    ).toBe("Failure");
   });
 });

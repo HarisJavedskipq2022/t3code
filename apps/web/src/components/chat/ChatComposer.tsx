@@ -140,11 +140,7 @@ import {
   type ComposerTasksProgress,
 } from "./ComposerTasksBadge";
 import { ComposerActivityRow } from "./ComposerActivityStatus";
-import {
-  composerWorking,
-  useComposerFusionBlocks,
-  type ComposerForkProps,
-} from "./composerForkExtras";
+import { composerWorking, type ComposerForkProps } from "./composerForkExtras";
 import {
   reconcileAttachmentContextReferences,
   useRetainedContextPayloads,
@@ -4310,18 +4306,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     ? standaloneComposerImages.filter((image) => pendingSnapShotIdSet.has(image.id))
     : standaloneComposerImages;
   const composerControlsCollapsed = isComposerResting || isComposerCollapsedMobile;
-  const fusionBlocks = useComposerFusionBlocks({
-    environmentId,
-    composerDraftTargetKey,
-    threadFusion: activeThread?.fusion,
-    selectedModelSelection,
-    instanceEntries: providerInstanceEntries,
-    modelOptionsByInstance,
-    planModeEnabled: settings.planModeEnabled,
-    collapsed: composerControlsCollapsed,
-    disabled: isSendBusy,
-    onFusionEnabled: props.onFusionEnabled,
-  });
   const showInlineRestingControls = composerControlsCollapsed && restingControlsHost === null;
   const composerControlsVisibleInStrip =
     composerControlsCollapsed && restingControlsHost !== null && restingControlsVisible;
@@ -4524,7 +4508,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         />
       ),
     },
-    ...fusionBlocks,
   ];
   const hiddenRestingBlockIds = restingBlockDefs
     .slice(restingBlockDefs.length - restingHiddenBlockCount)

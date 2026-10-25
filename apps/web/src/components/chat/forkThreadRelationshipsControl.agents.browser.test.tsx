@@ -160,7 +160,7 @@ it("does not offer to delete a stopped child thread without thread permission", 
         status: "failed",
         providerInstanceId: "opencode",
         childThreadId: "sidekick-chat",
-        title: "Fusion sidekick: tickets",
+        title: "Ticket worker",
         startedAt: DateTime.makeUnsafe("2026-10-15T19:43:00Z"),
         completedAt: null,
         updatedAt: DateTime.makeUnsafe("2026-10-15T19:43:00Z"),
@@ -172,7 +172,7 @@ it("does not offer to delete a stopped child thread without thread permission", 
       environmentId: "remote",
       source: {
         id: "sidekick-chat",
-        title: "Fusion sidekick: tickets",
+        title: "Ticket worker",
         lineage: { parentThreadId: "lead", relationshipToParent: "subagent" },
         status: "failed",
       },
@@ -181,7 +181,7 @@ it("does not offer to delete a stopped child thread without thread permission", 
   await using screen = await render(panel(), { router: false });
   const [previousAgents] = sectionToggles(screen, false);
   if (previousAgents) await click(previousAgents);
-  expect(allByLabel(screen, "Delete thread Fusion sidekick: tickets")).toHaveLength(0);
+  expect(allByLabel(screen, "Delete thread Ticket worker")).toHaveLength(0);
 });
 
 it("drops a deleted child agent's row only once the archive shows its thread is gone", async () => {
@@ -206,7 +206,7 @@ it("drops a deleted child agent's row only once the archive shows its thread is 
         id: "sidekick",
         status: "failed",
         childThreadId: "sidekick-chat",
-        title: "Fusion sidekick: tickets",
+        title: "Ticket worker",
       },
       {
         ...agent,
@@ -227,7 +227,7 @@ it("drops a deleted child agent's row only once the archive shows its thread is 
     },
   });
   const reviewerShell = childShell("reviewer-chat", "Reviewer", "completed");
-  state.shells = [childShell("sidekick-chat", "Fusion sidekick: tickets", "failed"), reviewerShell];
+  state.shells = [childShell("sidekick-chat", "Ticket worker", "failed"), reviewerShell];
   // The archive has not loaded yet.
   state.archived = { snapshots: [], error: null, isLoading: true };
   await using screen = await render(panel(), { router: false });
@@ -240,7 +240,7 @@ it("drops a deleted child agent's row only once the archive shows its thread is 
     state.shells = [reviewerShell];
     return { _tag: "Success" };
   });
-  await click(byLabel(screen, "Delete thread Fusion sidekick: tickets"));
+  await click(byLabel(screen, "Delete thread Ticket worker"));
   await screen.rerender(panel());
   // Without the archive, a thread with no shell may be archived rather than deleted.
   expect(rowText()).toHaveLength(2);

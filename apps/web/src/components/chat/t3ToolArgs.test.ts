@@ -11,9 +11,9 @@ describe("readableT3ToolArgs", () => {
       readableT3ToolArgs(
         wait,
         { threadId: encodedId, timeoutMs: 3_600_000, clientRequestId: "step-3" },
-        "Fusion sidekick: SHP-3783",
+        "Ticket worker: SHP-3783",
       ),
-    ).toEqual({ thread: "Fusion sidekick: SHP-3783", timeout: "60 min" });
+    ).toEqual({ thread: "Ticket worker: SHP-3783", timeout: "60 min" });
     expect(readableT3ToolArgs(wait, { timeoutMs: 45_000 }, null)).toEqual({ timeout: "45 s" });
   });
 

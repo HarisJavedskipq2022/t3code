@@ -1,9 +1,4 @@
-import type {
-  OrchestrationV2Subagent,
-  OrchestrationV2ThreadProjection,
-  ScopedThreadRef,
-} from "@t3tools/contracts";
-import { findFusionSidekick } from "@t3tools/shared/fusion";
+import type { OrchestrationV2ThreadProjection, ScopedThreadRef } from "@t3tools/contracts";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom } from "effect/reactivity";
 
@@ -133,27 +128,6 @@ export function createEnvironmentThreadDetailAtoms<E>(
     }).pipe(Atom.setIdleTTL(0), Atom.withLabel(`environment-thread-turn-subagents:${key}`));
   });
 
-  // The Fusion lead's sidekick, whatever its status, so a failed one still shows.
-  const fusionSidekickAtomFamily = Atom.family((key: string) => {
-    let previous: Pick<OrchestrationV2ThreadProjection, "thread" | "subagents"> | null = null;
-    let value: OrchestrationV2Subagent | null = null;
-    return Atom.make((get) => {
-      const projection = Option.getOrNull(get(threadStateValueAtomFamily(key)).data);
-      if (projection === null) {
-        previous = null;
-        value = null;
-      } else if (
-        projection.thread.fusion !== previous?.thread.fusion ||
-        projection.subagents !== previous?.subagents
-      ) {
-        const { thread, subagents } = projection;
-        previous = { thread, subagents };
-        value = thread.fusion ? findFusionSidekick(subagents, thread.fusion) : null;
-      }
-      return value;
-    }).pipe(Atom.setIdleTTL(0), Atom.withLabel(`environment-thread-fusion-sidekick:${key}`));
-  });
-
   const checkpointSummariesAtomFamily = Atom.family((key: string) => {
     let previous: Pick<OrchestrationV2ThreadProjection, "checkpoints" | "messages"> | null = null;
     let value = EMPTY_CHECKPOINT_SUMMARIES;
@@ -240,7 +214,6 @@ export function createEnvironmentThreadDetailAtoms<E>(
     queueWorkflowAtom: (ref: ScopedThreadRef) => queueWorkflowAtomFamily(threadKey(ref)),
     queuedCountAtom: (ref: ScopedThreadRef) => queuedCountAtomFamily(threadKey(ref)),
     turnSubagentsAtom: (ref: ScopedThreadRef) => turnSubagentsAtomFamily(threadKey(ref)),
-    fusionSidekickAtom: (ref: ScopedThreadRef) => fusionSidekickAtomFamily(threadKey(ref)),
     checkpointSummariesAtom: (ref: ScopedThreadRef) =>
       checkpointSummariesAtomFamily(threadKey(ref)),
     stateAtom: (ref: ScopedThreadRef) => threadStateValueAtomFamily(threadKey(ref)),

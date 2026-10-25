@@ -3,7 +3,7 @@ import { resolvePathLinkTarget } from "@t3tools/shared/fileLinks";
 import { ThreadFind, ThreadFindCanvas, type ThreadFindControls } from "./chat/ThreadFindProvider";
 import { withTicketBootstrap } from "@t3tools/client-runtime/jira-ticket-draft";
 import { clearTicketDraft, readTicketDraft } from "./jira/ticketDraftStore";
-import { fusionTurnStartField, useForkChatViewExtras } from "./chat/forkChatViewExtras";
+import { useForkChatViewExtras } from "./chat/forkChatViewExtras";
 import { THREAD_FIND_BAR_RESERVED_HEIGHT } from "./chat/ThreadFindBar";
 import { usageLimitRecoveryBannerItem } from "./chat/UsageLimitRecoveryBanner";
 import {
@@ -2672,7 +2672,6 @@ export default function ChatView(props: ChatViewProps) {
   const forkExtras = useForkChatViewExtras({
     environmentId,
     activeThreadRef,
-    routeThreadDetailRef,
     vetAvailable: isServerThread && isGitRepo,
     isWorking,
     isPreparingWorktree,
@@ -2680,7 +2679,6 @@ export default function ChatView(props: ChatViewProps) {
     paintOnlyDisplayedTimeline,
     activeWorkStartedAt,
     activeRunId: activeActivityRun?.runId ?? null,
-    leadActivityStartedAt: activeThreadShell?.runtime?.activityStartedAt ?? null,
     turnItems: serverVisibleTurnItems,
     setThreadError,
   });
@@ -3910,7 +3908,7 @@ export default function ChatView(props: ChatViewProps) {
     });
   };
   const onOpenRelatedThreadStable = useStableCallback(onOpenRelatedThread);
-  const childThreadInputs = forkExtras.hideBlockedSidekick(useChildThreadInputs(activeThreadRef));
+  const childThreadInputs = useChildThreadInputs(activeThreadRef);
   const childInputBanner = childInputBannerItem({
     childThreadInputs,
     parentAwaitingUser: Boolean(
@@ -4145,12 +4143,9 @@ export default function ChatView(props: ChatViewProps) {
       : null;
   const composerBannerItems = (() => {
     const limitRecoveryItems = limitRecoveryBanner === null ? [] : [limitRecoveryBanner];
-    const backgroundWorkItems = [
-      forkExtras.fusionSidekickBannerItem,
-      childInputBanner,
-      goalBanner,
-      backgroundWorkBanner,
-    ].filter((item) => item !== null);
+    const backgroundWorkItems = [childInputBanner, goalBanner, backgroundWorkBanner].filter(
+      (item) => item !== null,
+    );
     const usageLimitsItems = usageLimitsBanner === null ? [] : [usageLimitsBanner];
     const projectCloneItems = projectCloneBannerItem === null ? [] : [projectCloneBannerItem];
     if (!localCheckoutBranchMismatch || !showBranchMismatchBanner || !activeBranchMismatchKey) {
@@ -5722,7 +5717,6 @@ export default function ChatView(props: ChatViewProps) {
             }),
           },
           modelSelection: ctxSelectedModelSelection,
-          ...fusionTurnStartField(composerDraftTarget, environmentId),
           titleSeed: title,
           runtimeMode,
           interactionMode: sendInteractionMode,
@@ -6269,12 +6263,6 @@ export default function ChatView(props: ChatViewProps) {
     scheduleComposerFocus();
   };
   const onEnvModeChangeStable = useStableCallback(onEnvModeChange);
-  // Fusion's two agents build a whole feature; an unstarted thread gets its own
-  // branch instead of editing the shared checkout. The selector can switch it back.
-  const onFusionEnabledStable = useStableCallback(() => {
-    if (!isGitRepo || envMode !== "local") return;
-    if (isLocalDraftThread || canOverrideServerThreadEnvMode) onEnvModeChange("worktree");
-  });
 
   const onWorktreeSetupWorkLocally = () => {
     if (!worktreeSetup || worktreeSetup.phase !== "running" || !draftId) {
@@ -6973,7 +6961,6 @@ export default function ChatView(props: ChatViewProps) {
                               queuedRunsControl={queuedRunsControl}
                               bannerItems={composerBannerItems}
                               workingStatus={forkExtras.composerWorkingStatus}
-                              onFusionEnabled={onFusionEnabledStable}
                               resumeCompactionTokens={resumeCompactionTokens}
                               keepFullHistory={keepFullHistory}
                               onToggleKeepFullHistory={toggleKeepFullHistoryStable}

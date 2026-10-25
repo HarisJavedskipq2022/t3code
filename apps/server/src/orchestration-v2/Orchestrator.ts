@@ -65,7 +65,6 @@ import {
   type TurnItemId,
 } from "@t3tools/contracts";
 import { modelSelectionsEqual } from "@t3tools/shared/model";
-import { threadFusionChanged } from "./Fusion.ts";
 import {
   derivePendingBackgroundWork,
   pendingBackgroundTurnItems,
@@ -5001,24 +5000,6 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           messageId: command.messageId,
         }),
       ]);
-      projection = yield* getProjectionWithPendingEvents(command.threadId, events);
-    }
-    // Fusion rides on the message; null turns it off. It applies before any
-    // steer, queue, or start so a queued message's change is not lost.
-    const currentFusion = projection.thread.fusion ?? null;
-    const fusion = command.fusion === undefined ? currentFusion : command.fusion;
-    if (threadFusionChanged(currentFusion, fusion)) {
-      const fusionUpdatedAt = yield* DateTime.now;
-      yield* emit(
-        events,
-        command,
-      )({
-        type: "thread.fusion-updated",
-        threadId: command.threadId,
-        providerInstanceId: projection.thread.providerInstanceId,
-        occurredAt: fusionUpdatedAt,
-        payload: { ...projection.thread, fusion, updatedAt: fusionUpdatedAt },
-      });
       projection = yield* getProjectionWithPendingEvents(command.threadId, events);
     }
     const modelSelection = command.modelSelection ?? projection.thread.modelSelection;
