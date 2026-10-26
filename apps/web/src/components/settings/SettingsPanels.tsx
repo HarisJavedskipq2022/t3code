@@ -447,6 +447,9 @@ export function useSettingsRestore(onRestored?: () => void) {
     ...(settings.sidebarUsageStripEnabled !== DEFAULT_UNIFIED_SETTINGS.sidebarUsageStripEnabled
       ? ["Usage limits in sidebar"]
       : []),
+    ...(settings.sidebarDensity !== DEFAULT_UNIFIED_SETTINGS.sidebarDensity
+      ? ["Sidebar density"]
+      : []),
     ...(settings.sidebarAutoSettleAfterDays !== DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleAfterDays
       ? ["Auto-settle inactive threads"]
       : []),
@@ -617,6 +620,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       sidebarWorkingShelfEnabled: DEFAULT_UNIFIED_SETTINGS.sidebarWorkingShelfEnabled,
       sidebarGroupByProjectEnabled: DEFAULT_UNIFIED_SETTINGS.sidebarGroupByProjectEnabled,
       sidebarUsageStripEnabled: DEFAULT_UNIFIED_SETTINGS.sidebarUsageStripEnabled,
+      sidebarDensity: DEFAULT_UNIFIED_SETTINGS.sidebarDensity,
       sidebarAutoSettleAfterDays: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleAfterDays,
       sidebarAutoSettleKeepPullRequests: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleKeepPullRequests,
       sidebarAutoSettleOnMerge: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleOnMerge,
@@ -1053,6 +1057,45 @@ export function GeneralSettingsPanel() {
               }
               aria-label="Group threads by project"
             />
+          }
+        />
+
+        <SettingsRow
+          {...searchableSetting("sidebar-density")}
+          description="Compact rows fit each thread in two lines: its title, then its branch and changes."
+          resetAction={
+            settings.sidebarDensity !== DEFAULT_UNIFIED_SETTINGS.sidebarDensity ? (
+              <SettingResetButton
+                label="sidebar density"
+                onClick={() =>
+                  updateSettings({ sidebarDensity: DEFAULT_UNIFIED_SETTINGS.sidebarDensity })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Select
+              value={settings.sidebarDensity}
+              onValueChange={(value) => {
+                if (value === "comfortable" || value === "compact") {
+                  updateSettings({ sidebarDensity: value });
+                }
+              }}
+            >
+              <SelectTrigger size="sm" className="w-full sm:w-40" aria-label="Sidebar density">
+                <SelectValue>
+                  {(value: string | null) => (value === "compact" ? "Compact" : "Comfortable")}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectPopup align="end" alignItemWithTrigger={false}>
+                <SelectItem hideIndicator value="comfortable">
+                  Comfortable
+                </SelectItem>
+                <SelectItem hideIndicator value="compact">
+                  Compact
+                </SelectItem>
+              </SelectPopup>
+            </Select>
           }
         />
 

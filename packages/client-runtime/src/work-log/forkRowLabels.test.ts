@@ -1,8 +1,44 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { compactCommandLabel, withToolQuery } from "./forkRowLabels.ts";
+import {
+  commandRowLabel,
+  compactCommandLabel,
+  withTildeHome,
+  withToolQuery,
+} from "./forkRowLabels.ts";
 
 const root = "/Users/me/.t3code-fork/worktrees/ship-nest/feat-shp-3783";
+
+describe("commandRowLabel", () => {
+  it("leads with the step the provider described", () => {
+    expect(commandRowLabel("ls node_modules | grep eslint", "Find the ESLint plugin", root)).toBe(
+      "Find the ESLint plugin",
+    );
+  });
+
+  it("falls back to the command for a generic title or one that repeats it", () => {
+    expect(commandRowLabel(`cd ${root} && git status`, "Command", root)).toBe("git status");
+    expect(commandRowLabel("git status --short", "`git status --short`")).toBe(
+      "git status --short",
+    );
+    expect(commandRowLabel("cat /Users/me/.zshrc", undefined)).toBe("cat ~/.zshrc");
+  });
+});
+
+describe("withTildeHome", () => {
+  it("shows home folders as ~ wherever a path starts", () => {
+    expect(withTildeHome("L=/Users/me/.local/share/lint; ls $L")).toBe(
+      "L=~/.local/share/lint; ls $L",
+    );
+    expect(withTildeHome('cd "/home/dev/app" && ls /Users/me')).toBe('cd "~/app" && ls ~');
+  });
+
+  it("leaves other absolute paths alone", () => {
+    expect(withTildeHome("ls /usr/local/Users/x /tmp/home/y")).toBe(
+      "ls /usr/local/Users/x /tmp/home/y",
+    );
+  });
+});
 
 describe("compactCommandLabel", () => {
   it("drops a cd into the workspace and shortens one into a subfolder", () => {

@@ -373,6 +373,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["sidebar repository repo headers sections organize"],
   },
   {
+    id: "sidebar-density",
+    title: "Sidebar density",
+    to: "/settings/general",
+    searchTerms: ["compact comfortable rows height spacing dense thread list"],
+  },
+  {
     id: "sidebar-usage-limits",
     title: "Usage limits in sidebar",
     to: "/settings/general",

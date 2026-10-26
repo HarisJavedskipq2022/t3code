@@ -2,6 +2,7 @@
 @import "./forkThemes.css";
 @import "./forkMotion.css";
 @import "./forkCodeChunks.css";
+@import "./forkLook.css";
 
 @custom-variant dark (&:is(.dark, .dark *));
 @custom-variant light (&:not(.dark, .dark *));

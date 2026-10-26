@@ -112,7 +112,8 @@ export function resolveDesktopAppBranding(input: {
   return {
     baseName,
     stageLabel,
-    displayName: `${baseName} (${stageLabel})`,
+    // A fork names itself; its nightly base shows in About instead of the title.
+    displayName: input.baseName ? baseName : `${baseName} (${stageLabel})`,
   };
 }
 

@@ -1133,6 +1133,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   );
 
   const projectGroupKeys = useSidebarProjectGroupKeys(projectGroups, scopedProjectKeys !== null);
+  const compactRows = useClientSettings((s) => s.sidebarDensity) === "compact";
   const {
     workingShelfEnabled,
     pinnedThreads,
@@ -3025,7 +3026,10 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                             }
                             thread={thread}
                             variant={rowVariant}
-                            compact={projectGroupKeys !== null && isCard && section !== "pinned"}
+                            compact={
+                              isCard &&
+                              (compactRows || (projectGroupKeys !== null && section !== "pinned"))
+                            }
                             variantAction={
                               section === "snoozed"
                                 ? "unsnooze"

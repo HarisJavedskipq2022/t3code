@@ -44,19 +44,6 @@ export function usageStripEntries(pools: readonly LimitPool[]): readonly UsageSt
   });
 }
 
-/** The collapsed strip shows only the provider closest to running out. */
-export function tightestUsageStripEntry(
-  entries: readonly UsageStripEntry[],
-): UsageStripEntry | null {
-  return entries.reduce<UsageStripEntry | null>(
-    (lowest, entry) =>
-      lowest === null || entry.tightest.remainingPercent < lowest.tightest.remainingPercent
-        ? entry
-        : lowest,
-    null,
-  );
-}
-
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;

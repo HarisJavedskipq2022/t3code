@@ -58,6 +58,9 @@ export const DiffLayout = Schema.Literals(["stacked", "split"]);
 export type DiffLayout = typeof DiffLayout.Type;
 const DEFAULT_DIFF_LAYOUT: DiffLayout = "stacked";
 
+export const SidebarDensity = Schema.Literals(["comfortable", "compact"]);
+export type SidebarDensity = typeof SidebarDensity.Type;
+
 export const SidebarProjectSortOrder = Schema.Literals(["updated_at", "created_at", "manual"]);
 export type SidebarProjectSortOrder = typeof SidebarProjectSortOrder.Type;
 export const DEFAULT_SIDEBAR_PROJECT_SORT_ORDER: SidebarProjectSortOrder = "updated_at";
@@ -442,6 +445,7 @@ export const ClientSettingsSchema = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed(false)),
   ),
   sidebarUsageStripEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  sidebarDensity: SidebarDensity.pipe(Schema.withDecodingDefault(Effect.succeed("comfortable"))),
   sidebarProjectGroupingMode: SidebarProjectGroupingMode.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_SIDEBAR_PROJECT_GROUPING_MODE)),
   ),
@@ -1677,6 +1681,7 @@ export const ClientSettingsPatch = Schema.Struct({
   sidebarWorkingShelfEnabled: Schema.optionalKey(Schema.Boolean),
   sidebarGroupByProjectEnabled: Schema.optionalKey(Schema.Boolean),
   sidebarUsageStripEnabled: Schema.optionalKey(Schema.Boolean),
+  sidebarDensity: Schema.optionalKey(SidebarDensity),
   sidebarProjectGroupingMode: Schema.optionalKey(SidebarProjectGroupingMode),
   sidebarProjectGroupingOverrides: Schema.optionalKey(
     Schema.Record(TrimmedNonEmptyString, SidebarProjectGroupingMode),

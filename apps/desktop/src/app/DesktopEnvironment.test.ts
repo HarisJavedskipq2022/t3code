@@ -82,7 +82,8 @@ describe("DesktopEnvironment", () => {
       const official = yield* makeEnvironment({ isPackaged: true });
 
       assert.equal(fork.branding.baseName, "HCode");
-      assert.equal(fork.displayName, "HCode (Nightly)");
+      assert.equal(fork.displayName, "HCode");
+      assert.equal(fork.branding.stageLabel, "Nightly");
       assert.equal(official.branding.baseName, "T3 Code");
     }),
   );

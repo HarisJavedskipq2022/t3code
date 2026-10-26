@@ -8348,7 +8348,7 @@ describe("ClaudeAdapterV2 background wake turns", () => {
       ),
   );
 
-  it.effect("stores a Bash result's stdout and stderr as command output", () =>
+  it.effect("stores a Bash result's output, titled by the command's description", () =>
     Effect.scoped(
       Effect.gen(function* () {
         const harness = yield* makeWakeHarness;
@@ -8380,7 +8380,7 @@ describe("ClaudeAdapterV2 background wake turns", () => {
                   type: "tool_use",
                   id: bashToolUseId,
                   name: "Bash",
-                  input: { command: "git status" },
+                  input: { command: "git status", description: "Show working tree status" },
                 },
               ],
             },
@@ -8426,6 +8426,10 @@ describe("ClaudeAdapterV2 background wake turns", () => {
             ? bash.turnItem.output
             : undefined,
           "On branch main\nwarning: dirty",
+        );
+        assert.equal(
+          bash?.type === "turn_item.updated" ? bash.turnItem.title : undefined,
+          "Show working tree status",
         );
       }).pipe(
         Effect.provide(

@@ -632,7 +632,13 @@ function WorkGroupHeader(props: {
         />
       }
       label={
-        <span className={cn("block truncate", props.active && !props.failed && "live-tool-shine")}>
+        <span
+          className={cn(
+            "block truncate",
+            // The shine paints its own text color.
+            props.active && !props.failed ? "live-tool-shine" : "text-foreground/80",
+          )}
+        >
           {props.label}
         </span>
       }

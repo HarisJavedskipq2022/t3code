@@ -8,6 +8,7 @@ import {
   type CommandStep,
   type GrepHit,
 } from "@t3tools/client-runtime/work-log/fork-command-steps";
+import { withTildeHome } from "@t3tools/client-runtime/work-log/fork-row-labels";
 import type { OrchestrationV2TurnItem } from "@t3tools/contracts";
 import { formatDuration } from "@t3tools/shared/orchestrationTiming";
 import * as DateTime from "effect/DateTime";
@@ -37,7 +38,7 @@ function StepLine(props: { readonly step: CommandStep }) {
       {joiner ? <span className="shrink-0 text-muted-foreground/70">{joiner}</span> : null}
       <div className="min-w-0 flex-1">
         <div className={cn(long && !expanded && "max-h-[8lh] overflow-hidden")}>
-          <ShellCommandBlock command={props.step.text} />
+          <ShellCommandBlock command={withTildeHome(props.step.text)} />
         </div>
         {long ? (
           <button type="button" className={toggleClassName} onClick={() => setExpanded(!expanded)}>
@@ -68,12 +69,11 @@ export function ForkCommandSteps(props: {
   const shown = foldable && !showSetup ? steps.slice(setupCount) : steps;
   const hasHeader = location !== "" || foldable;
   const CopyStateIcon = isCopied ? CheckIcon : CopyIcon;
+  const failed = props.exitCode !== undefined && props.exitCode !== 0;
   const meta = (
     <div className="flex shrink-0 items-center gap-2 text-muted-foreground">
       {props.durationMs !== null ? <span>{formatDuration(props.durationMs)}</span> : null}
-      {props.exitCode !== undefined && props.exitCode !== 0 ? (
-        <span className="text-destructive">exit {props.exitCode}</span>
-      ) : null}
+      {failed ? <span className="text-destructive">exit {props.exitCode}</span> : null}
       <button
         type="button"
         className={toggleClassName}
@@ -85,7 +85,12 @@ export function ForkCommandSteps(props: {
     </div>
   );
   return (
-    <div className="relative rounded-md border border-border/45 bg-muted/15 p-2">
+    <div
+      className={cn(
+        "relative rounded-md border border-border/45 bg-muted/15 p-2",
+        failed && "border-l-2 border-l-destructive/70",
+      )}
+    >
       {hasHeader ? (
         <div className="mb-1 flex min-w-0 items-center gap-2 text-muted-foreground">
           {location !== "" ? <span className="min-w-0 truncate">in {location}</span> : null}

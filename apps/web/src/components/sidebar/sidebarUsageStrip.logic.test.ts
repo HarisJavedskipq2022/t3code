@@ -2,12 +2,7 @@ import { ProviderDriverKind, type ServerProviderUsageWindow } from "@t3tools/con
 import { collectLimitPools, type LimitAccount } from "@t3tools/shared/usageLimits";
 import { describe, expect, it } from "vite-plus/test";
 
-import {
-  compactCountdown,
-  tightestUsageStripEntry,
-  usageStripEntries,
-  usageStripTone,
-} from "./sidebarUsageStrip.logic";
+import { compactCountdown, usageStripEntries, usageStripTone } from "./sidebarUsageStrip.logic";
 
 const NOW = Date.parse("2026-10-19T12:00:00.000Z");
 const HOUR = 3_600_000;
@@ -78,7 +73,6 @@ describe("usageStripEntries", () => {
     ]);
     expect(entries[0]!.windows).toHaveLength(2);
     expect(entries[0]!.resetAt).toBe(NOW + 2 * HOUR);
-    expect(tightestUsageStripEntry(entries)?.pool.driver).toBe("cursor");
   });
 
   it("pools several accounts into one row and counts down to the reset that refills", () => {
@@ -99,7 +93,6 @@ describe("usageStripEntries", () => {
 
   it("leaves out providers that report no windows", () => {
     expect(usageStripEntries(collectLimitPools([account("x", "grok", [])], NOW))).toEqual([]);
-    expect(tightestUsageStripEntry([])).toBeNull();
   });
 });
 

@@ -10,6 +10,7 @@ import {
   newerUpstreamNightly,
   UPSTREAM_RELEASE_TAG_URL,
 } from "../../upstreamNightly";
+import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
 const CHECK_INTERVAL_MS = 60 * 60 * 1000;
@@ -28,17 +29,18 @@ type SyncState = "idle" | "syncing" | DesktopForkSyncResult;
 const SYNC_LOG = "~/.t3code-fork/sync.log";
 
 /**
- * Fork-only: says when upstream has published a nightly this build has not
- * synced to yet. On a fork desktop build it also runs scripts/fork-sync.sh,
- * which merges, tests and builds it, then restarts into the new build.
+ * Says when upstream has a nightly this build lacks; a fork desktop build can run fork-sync.sh
+ * to merge, test, build and restart into it. `compact` shows a waiting nightly as an Update
+ * dot that opens the notice; a sync that is running, built or failed always shows in full.
  */
-export function SidebarNightlyNotice() {
+export function SidebarNightlyNotice({ compact = false }: { readonly compact?: boolean }) {
   const serverVersion = useAtomValue(primaryServerConfigAtom)?.environment.serverVersion ?? null;
   const [tags, setTags] = useState<ReadonlyArray<string>>([]);
   const [dismissedTag, setDismissedTag] = useState(readDismissedTag);
   const [syncState, setSyncState] = useState<SyncState>("idle");
   const bridge = typeof window === "undefined" ? undefined : window.desktopBridge;
 
+  // oxlint-disable-next-line t3code/react-effect-budget -- polls upstream's releases on a timer.
   useEffect(() => {
     const controller = new AbortController();
     const check = () => {
@@ -105,7 +107,7 @@ export function SidebarNightlyNotice() {
     }
   };
 
-  return (
+  const notice = (
     <div className="relative flex min-h-7 w-full shrink-0 items-center overflow-hidden rounded-lg bg-sidebar-control-surface text-2xs leading-4 font-medium text-sidebar-foreground has-[button[data-nightly-notice-main]:hover]:bg-sidebar-row-hover">
       <Tooltip>
         <TooltipTrigger
@@ -152,5 +154,25 @@ export function SidebarNightlyNotice() {
         </Tooltip>
       )}
     </div>
+  );
+  if (!compact || syncState !== "idle") return notice;
+  return (
+    <Popover>
+      <PopoverTrigger
+        render={
+          <button
+            type="button"
+            aria-label={`Nightly ${label} is out`}
+            className="flex h-5 shrink-0 cursor-pointer items-center gap-1 rounded-md px-1.5 text-2xs font-semibold text-(--fork-brand) outline-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+          />
+        }
+      >
+        <span aria-hidden className="size-1.5 rounded-full bg-(--fork-brand)" />
+        Update
+      </PopoverTrigger>
+      <PopoverPopup side="top" align="end" padding="compact" width="sm">
+        {notice}
+      </PopoverPopup>
+    </Popover>
   );
 }

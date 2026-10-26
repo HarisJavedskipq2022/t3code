@@ -57,6 +57,29 @@ export function compactCommandLabel(command: string, workspaceRoot?: string | nu
   return dir === "" ? rest : `cd ${dir} && ${rest}`;
 }
 
+const HOME_FOLDER = /(^|[\s"'=:])\/(?:Users|home)\/[^/\s"']+(?=[/\s"']|$)/gu;
+
+/** Paths under a home folder as `~/…`, the way a shell user reads them. Display only. */
+export function withTildeHome(text: string): string {
+  return text.replace(HOME_FOLDER, "$1~");
+}
+
+/**
+ * A command row's label: the step the provider described (Claude sends one
+ * with every Bash call), else the compact command. A one-word title ("Command",
+ * a tool name) or one that only repeats the command says nothing more.
+ */
+export function commandRowLabel(
+  command: string,
+  title: string | null | undefined,
+  workspaceRoot?: string | null,
+): string {
+  const described = title?.trim().replace(/\s+/gu, " ") ?? "";
+  const repeatsCommand = command.trim().startsWith(described.replace(/`/gu, ""));
+  if (/\s/u.test(described) && !repeatsCommand) return described;
+  return withTildeHome(compactCommandLabel(command, workspaceRoot));
+}
+
 /** A bare tool title with the query it ran, e.g. `Search “order page tabs”`. */
 export function withToolQuery(label: string, input: unknown): string {
   if (input === null || typeof input !== "object" || Array.isArray(input)) return label;

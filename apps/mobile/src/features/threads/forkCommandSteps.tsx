@@ -6,6 +6,7 @@ import {
   splitCommandSteps,
   type CommandStep,
 } from "@t3tools/client-runtime/work-log/fork-command-steps";
+import { withTildeHome } from "@t3tools/client-runtime/work-log/fork-row-labels";
 import { useState } from "react";
 import { Pressable, View } from "react-native";
 
@@ -32,7 +33,7 @@ function StepText(props: { readonly step: CommandStep }) {
         className="font-mono text-2xs leading-normal text-foreground"
       >
         {joiner ? <Text className="text-foreground-subtle">{`${joiner} `}</Text> : null}
-        {props.step.text}
+        {withTildeHome(props.step.text)}
       </Text>
       {long ? (
         <Pressable accessibilityRole="button" onPress={() => setExpanded(!expanded)}>

@@ -8,13 +8,10 @@ import {
   type LimitPoolWindow,
 } from "@t3tools/shared/usageLimits";
 import { useLocation, useNavigate } from "@tanstack/react-router";
-import { Schema } from "effect";
-import { ChevronDownIcon } from "lucide-react";
-import { useEffect, useEffectEvent, useState } from "react";
+import { type ReactNode, useEffect, useEffectEvent, useState } from "react";
 import { refreshUsageLimits } from "@t3tools/client-runtime/state/usage";
 import type { EnvironmentId } from "@t3tools/contracts";
 
-import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { useClientSettings } from "../../hooks/useSettings";
 import { cn } from "../../lib/utils";
 import { environmentPresentations } from "../../state/presentation";
@@ -30,7 +27,6 @@ import { PaceIcon } from "../usage/UsageLimits";
 import { readUsagePagePreferences, saveUsagePagePreferences } from "../usage/usagePagePreferences";
 import {
   compactCountdown,
-  tightestUsageStripEntry,
   type UsageStripEntry,
   type UsageStripTone,
   usageStripEntries,
@@ -43,11 +39,10 @@ const TONE_FILL: Record<UsageStripTone, string> = {
   out: "bg-destructive",
 };
 
-const COLLAPSED_KEY = "t3code:sidebar:usage-strip-collapsed";
-
 // Countdowns only need minute precision; a faster clock would repaint the sidebar for nothing.
 function useMinuteClock() {
   const [now, setNow] = useState(Date.now);
+  // oxlint-disable-next-line t3code/react-effect-budget -- a timer is an external subscription.
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(interval);
@@ -81,6 +76,7 @@ function useUsageLimitsRefresh(environmentIds: ReadonlyArray<EnvironmentId>, act
   const refreshAutomatically = useEffectEvent(() => {
     if (document.visibilityState === "visible") void refreshAll(true);
   });
+  // oxlint-disable-next-line t3code/react-effect-budget -- subscribes to focus, visibility and a timer.
   useEffect(() => {
     if (!active) return;
     refreshAutomatically();
@@ -226,18 +222,63 @@ function UsageStripRow({
   );
 }
 
-/** Subscription limits at a glance, from the snapshots environments publish. */
-export function SidebarUsageStrip() {
+/** One provider's limit as a small meter; its reset times are in the hover card. */
+function UsageMeter({
+  entry,
+  now,
+  onOpen,
+}: {
+  readonly entry: UsageStripEntry;
+  readonly now: number;
+  readonly onOpen: () => void;
+}) {
+  const label = providerLabel(entry.pool.driver);
+  const remaining = entry.tightest.remainingPercent;
+  return (
+    <PreviewCard>
+      <PreviewCardTrigger
+        delay={250}
+        closeDelay={120}
+        render={
+          <button
+            type="button"
+            aria-label={`${label}: ${remaining}% left. Open usage limits`}
+            onClick={onOpen}
+            className="flex h-6 shrink-0 items-center gap-1 rounded-md px-1 outline-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+          />
+        }
+      >
+        <ProviderInstanceIcon
+          driverKind={entry.pool.driver}
+          displayName={label}
+          indicatorBackground="var(--sidebar)"
+          className="size-3.5 shrink-0"
+          iconClassName="size-3 text-foreground/80"
+        />
+        <UsageBar remainingPercent={remaining} className="w-6" />
+        <span className="text-2xs text-muted-foreground tabular-nums">{remaining}%</span>
+      </PreviewCardTrigger>
+      <PreviewCardPopup side="right" align="end" sideOffset={10} className="w-64">
+        <UsageHoverCard entry={entry} now={now} />
+      </PreviewCardPopup>
+    </PreviewCard>
+  );
+}
+
+/**
+ * Subscription limits at a glance, from the snapshots environments publish:
+ * one row of meters, with `trailing` (the nightly notice) at its end. A
+ * provider running low gets its own full row, so the strip grows only then.
+ */
+export function SidebarUsageStrip({ trailing }: { readonly trailing?: ReactNode }) {
   const enabled = useClientSettings((settings) => settings.sidebarUsageStripEnabled);
   const onUsagePage = useLocation({ select: (location) => location.pathname === "/usage" });
   const presentations = useAtomValue(environmentPresentations.presentationsWithProvidersAtom);
-  const [collapsed, setCollapsed] = useLocalStorage(COLLAPSED_KEY, false, Schema.Boolean);
   const { isMobile, setOpenMobile } = useSidebar();
   const navigate = useNavigate();
   const now = useMinuteClock();
   const entries = usageStripEntries(collectLimitPools(collectLimitAccounts(presentations), now));
-  const tightest = tightestUsageStripEntry(entries);
-  const shown = enabled && !onUsagePage && tightest !== null;
+  const shown = enabled && !onUsagePage && entries.length > 0;
   const connectedEnvironmentIds = [...presentations].flatMap(([environmentId, presentation]) =>
     presentation.connection.phase === "connected" && presentation.serverConfig !== null
       ? [environmentId]
@@ -245,29 +286,31 @@ export function SidebarUsageStrip() {
   );
   const { refreshing, refreshNow } = useUsageLimitsRefresh(connectedEnvironmentIds, shown);
 
-  if (!shown) return null;
+  if (!shown) {
+    return (
+      <div className="flex flex-wrap justify-end gap-1 px-1 pb-1 empty:hidden">{trailing}</div>
+    );
+  }
 
   const openLimits = () => {
     if (isMobile) setOpenMobile(false);
     saveUsagePagePreferences({ ...readUsagePagePreferences(), metric: "limits" });
     void navigate({ to: "/usage" });
   };
+  const isLow = (entry: UsageStripEntry) =>
+    usageStripTone(entry.tightest.remainingPercent) !== "ok";
 
   return (
     <section aria-label="Usage limits" className="flex flex-col gap-0.5 px-1 pb-1">
-      <div className="flex h-5 items-center gap-1">
-        <button
-          type="button"
-          aria-expanded={!collapsed}
-          onClick={() => setCollapsed(!collapsed)}
-          className="flex h-5 min-w-0 flex-1 items-center justify-between rounded-md px-1.5 text-2xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-        >
-          <span>Limits left</span>
-          <ChevronDownIcon
-            aria-hidden
-            className={cn("size-3 transition-transform", collapsed && "-rotate-90")}
-          />
-        </button>
+      {entries.filter(isLow).map((entry) => (
+        <UsageStripRow key={entry.pool.driver} entry={entry} now={now} onOpen={openLimits} />
+      ))}
+      <div className="flex min-h-6 flex-wrap items-center gap-0.5">
+        {entries
+          .filter((entry) => !isLow(entry))
+          .map((entry) => (
+            <UsageMeter key={entry.pool.driver} entry={entry} now={now} onOpen={openLimits} />
+          ))}
         <Tooltip>
           <TooltipTrigger
             render={
@@ -285,10 +328,9 @@ export function SidebarUsageStrip() {
           </TooltipTrigger>
           <TooltipPopup side="top">Refresh limits</TooltipPopup>
         </Tooltip>
+        <span className="flex-1" />
+        {trailing}
       </div>
-      {(collapsed ? [tightest] : entries).map((entry) => (
-        <UsageStripRow key={entry.pool.driver} entry={entry} now={now} onOpen={openLimits} />
-      ))}
     </section>
   );
 }

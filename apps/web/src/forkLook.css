@@ -1,0 +1,27 @@
+/* HCode's one brand color, on the sidebar mark and the open thread's edge;
+   themes keep their own accents everywhere else. */
+:root {
+  --fork-brand: #f2b64e;
+  --fork-brand-ink: #2a1d05;
+}
+
+@layer components {
+  [data-thread-item] [aria-current="page"]::before {
+    content: "";
+    position: absolute;
+    inset-block: 6px;
+    left: 0;
+    width: 2px;
+    border-radius: 0 2px 2px 0;
+    background: var(--fork-brand);
+    pointer-events: none;
+  }
+}
+
+/* Meta text is where counts live (ages, limits, durations, tokens): steady
+   digits stop them shifting as they tick. Prose keeps proportional figures. */
+@layer base {
+  :where(.text-xs, .text-2xs, .text-3xs) {
+    font-variant-numeric: tabular-nums;
+  }
+}

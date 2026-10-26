@@ -19,10 +19,7 @@ import {
   commandDisplayText,
   commandProgramName,
 } from "@t3tools/client-runtime/work-log/command-label";
-import {
-  compactCommandLabel,
-  withToolQuery,
-} from "@t3tools/client-runtime/work-log/fork-row-labels";
+import { commandRowLabel, withToolQuery } from "@t3tools/client-runtime/work-log/fork-row-labels";
 import {
   liveActivityToolStatus,
   normalizeCompactToolLabel,
@@ -147,7 +144,7 @@ export function workEntryDisplayLabel(entry: WorkLogEntry, workspaceRoot: string
   const toolPresentation = resolveWorkEntryToolPresentation(entry);
   if (toolPresentation) return toolPresentation.displayName;
   if (entry.command?.trim()) {
-    return compactCommandLabel(commandDisplayText(entry.command), workspaceRoot);
+    return commandRowLabel(commandDisplayText(entry.command), entry.toolTitle, workspaceRoot);
   }
   const action = toolGroupAction(entry);
   if (action === "code-search" || action === "search") {
