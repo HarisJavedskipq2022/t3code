@@ -85,6 +85,7 @@ function commandError(result: AtomCommandResult<unknown, unknown>, fallback: str
 /** A textarea focused once it mounts; autoFocus loses to the focus the opening click keeps. */
 function FocusedTextarea(props: ComponentProps<typeof Textarea>) {
   const ref = useRef<HTMLTextAreaElement | null>(null);
+  // oxlint-disable-next-line t3code/react-effect-budget -- focus must land after the opening click settles.
   useLayoutEffect(() => {
     const frame = window.requestAnimationFrame(() => ref.current?.focus({ preventScroll: true }));
     return () => window.cancelAnimationFrame(frame);
@@ -497,33 +498,27 @@ export function VetPanel({
   const runReview = async () => {
     setBusy(true);
     setCommandFailure(null);
-    try {
-      const result = await start({
-        environmentId: threadRef.environmentId,
-        input: {
-          threadId: threadRef.threadId,
-          reviewer,
-          ...(goal.trim() ? { goal: goal.trim() } : {}),
-        },
-      });
-      if (result._tag === "Success") setEditingGoal(false);
-      setCommandFailure(commandError(result, "Could not start the review."));
-    } finally {
-      setBusy(false);
-    }
+    const result = await start({
+      environmentId: threadRef.environmentId,
+      input: {
+        threadId: threadRef.threadId,
+        reviewer,
+        ...(goal.trim() ? { goal: goal.trim() } : {}),
+      },
+    });
+    setBusy(false);
+    if (result._tag === "Success") setEditingGoal(false);
+    setCommandFailure(commandError(result, "Could not start the review."));
   };
   const cancelReview = async () => {
     setBusy(true);
     setCommandFailure(null);
-    try {
-      const result = await cancel({
-        environmentId: threadRef.environmentId,
-        input: { threadId: threadRef.threadId },
-      });
-      setCommandFailure(commandError(result, "Could not stop the review."));
-    } finally {
-      setBusy(false);
-    }
+    const result = await cancel({
+      environmentId: threadRef.environmentId,
+      input: { threadId: threadRef.threadId },
+    });
+    setBusy(false);
+    setCommandFailure(commandError(result, "Could not stop the review."));
   };
 
   const failure = commandFailure ?? actions.error ?? query.error ?? null;

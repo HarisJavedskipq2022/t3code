@@ -20,7 +20,6 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 import * as Threads from "../orchestration-v2/ThreadManagementService.ts";
@@ -117,7 +116,7 @@ function harness(initial = [script()]) {
             ),
         }),
         Layer.mock(Projects.ProjectService)({
-          getById: () => Effect.succeed(Option.some(project)),
+          getById: () => Effect.succeedSome(project),
         }),
         Layer.mock(Settings.ServerSettingsService)({
           getSettings: Effect.sync(() => ({

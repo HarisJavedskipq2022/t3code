@@ -13,7 +13,7 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import { terminalOutputText } from "@t3tools/client-runtime/state/terminal";
 import { serviceLogText } from "@t3tools/client-runtime/state/worktreeServices";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useEnvironmentQuery } from "../../state/query";
 import { useEnvironmentScope } from "../../state/session";
 import { useAtomCommand } from "../../state/use-atom-command";
@@ -86,13 +86,6 @@ function Services(props: Props) {
   const [error, setError] = useState<string | null>(null);
   const [logs, setLogs] = useState<WorktreeService | null>(null);
   const inFlight = useRef(false);
-  const mounted = useRef(true);
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
   const snapshot = result?.base === query.data ? result.value : query.data;
   const rows = snapshot?.services ?? [];
   const run = async (action: WorktreeServiceControlInput["action"], scriptId?: string) => {
@@ -101,22 +94,18 @@ function Services(props: Props) {
     setBusy(true);
     setError(null);
     const base = query.data;
-    try {
-      const next = await control({
-        environmentId: props.environmentId,
-        input: { threadId: props.threadId, action, ...(scriptId ? { scriptId } : {}) },
-      });
-      if (!mounted.current) return;
-      if (next._tag === "Success") {
-        setResult({ base, value: next.value });
-        query.refresh();
-      } else if (!isAtomCommandInterrupted(next)) {
-        const failure = squashAtomCommandFailure(next);
-        setError(failure instanceof Error ? failure.message : "Could not control app services.");
-      }
-    } finally {
-      inFlight.current = false;
-      if (mounted.current) setBusy(false);
+    const next = await control({
+      environmentId: props.environmentId,
+      input: { threadId: props.threadId, action, ...(scriptId ? { scriptId } : {}) },
+    });
+    inFlight.current = false;
+    setBusy(false);
+    if (next._tag === "Success") {
+      setResult({ base, value: next.value });
+      query.refresh();
+    } else if (!isAtomCommandInterrupted(next)) {
+      const failure = squashAtomCommandFailure(next);
+      setError(failure instanceof Error ? failure.message : "Could not control app services.");
     }
   };
   if (query.isSuccess && rows.length === 0 && !query.error) return null;
@@ -228,11 +217,7 @@ function Services(props: Props) {
                   onClick={() =>
                     void openDiscoveredPort({ threadRef: props, port, openPreview }).then(
                       (opened) => {
-                        if (
-                          mounted.current &&
-                          opened._tag === "Failure" &&
-                          !isAtomCommandInterrupted(opened)
-                        )
+                        if (opened._tag === "Failure" && !isAtomCommandInterrupted(opened))
                           setError("Could not open the service in the browser.");
                       },
                     )

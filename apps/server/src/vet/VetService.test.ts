@@ -113,7 +113,7 @@ const setup = Effect.gen(function* () {
               }) as never,
           }),
           Layer.mock(ProjectStore.ProjectStoreV2)({
-            get: () => Effect.succeed(Option.some({ workspaceRoot: workspace } as never)),
+            get: () => Effect.succeedSome({ workspaceRoot: workspace } as never),
           }),
         ),
       ),

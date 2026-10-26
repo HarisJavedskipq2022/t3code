@@ -40,7 +40,7 @@ export const runForkSyncScript = Effect.fn("desktop.forkSync.runScript")(functio
       return exitCode === 0 ? ("built" as const) : ("failed" as const);
     }),
   ).pipe(
-    Effect.catch(() => Effect.succeed("failed" as const)),
+    Effect.orElseSucceed(() => "failed" as const),
     Effect.onExit((exit) => {
       inFlight = null;
       return Deferred.done(done, Exit.isSuccess(exit) ? exit : Exit.succeed("failed"));

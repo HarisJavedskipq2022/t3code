@@ -26,14 +26,11 @@ export function projectScriptServiceInput(script: ProjectScript) {
 }
 
 /** The action editor's app-service switch and base port. */
-export function useProjectScriptServiceFields() {
-  const [service, setService] = useState(false);
-  const [servicePortInput, setServicePortInput] = useState("");
-
-  const reset = (initial: ProjectScriptServiceInput) => {
-    setService(initial.service ?? false);
-    setServicePortInput(initial.servicePort == null ? "" : String(initial.servicePort));
-  };
+export function useProjectScriptServiceFields(initial: ProjectScriptServiceInput) {
+  const [service, setService] = useState(initial.service ?? false);
+  const [servicePortInput, setServicePortInput] = useState(
+    initial.servicePort == null ? "" : String(initial.servicePort),
+  );
 
   /** The fields to save, or the message saying why they cannot be saved. */
   const parse = (roles: {
@@ -87,5 +84,5 @@ export function useProjectScriptServiceFields() {
     </>
   );
 
-  return { reset, parse, controls };
+  return { parse, controls };
 }

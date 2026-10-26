@@ -244,7 +244,7 @@ it("drops a deleted child agent's row only once the archive shows its thread is 
   await screen.rerender(panel());
   // Without the archive, a thread with no shell may be archived rather than deleted.
   expect(rowText()).toHaveLength(2);
-  expect(rowText().some((text) => text.includes("tickets"))).toBe(true);
+  expect(rowText().some((text) => text.includes("Ticket worker"))).toBe(true);
 
   state.archived = { snapshots: [], error: "Failed to load archived threads.", isLoading: false };
   await screen.rerender(panel());

@@ -430,7 +430,7 @@ const make = Effect.gen(function* () {
     );
 
   return VetService.of({
-    get: (input) => snapshot(input.threadId),
+    get: Effect.fn("VetService.get")((input) => snapshot(input.threadId)),
     watch,
     run,
     cancel,
