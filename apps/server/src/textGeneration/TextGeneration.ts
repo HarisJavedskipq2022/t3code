@@ -32,7 +32,8 @@ type TextGenerationOp =
   | "generatePrContent"
   | "generateBranchName"
   | "generateThreadTitle"
-  | "generateReviewGuide";
+  | "generateReviewGuide"
+  | "enhancePrompt";
 
 const resolveInstance = (
   registry: ProviderInstanceRegistry.ProviderInstanceRegistry["Service"],
@@ -93,6 +94,20 @@ export const make = Effect.gen(function* () {
               ));
             return yield* textGeneration.generateThreadTitle({ ...input, linkedContext });
           }),
+        ),
+      );
+    }),
+    enhancePrompt: Effect.fn("TextGeneration.enhancePrompt")(function (input) {
+      return resolveInstance(registry, "enhancePrompt", input.modelSelection.instanceId).pipe(
+        Effect.flatMap((textGeneration) =>
+          textGeneration.enhancePrompt
+            ? textGeneration.enhancePrompt(input)
+            : Effect.fail(
+                new TextGenerationError({
+                  operation: "enhancePrompt",
+                  detail: "This provider does not rewrite prompts.",
+                }),
+              ),
         ),
       );
     }),

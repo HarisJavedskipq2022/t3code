@@ -354,7 +354,14 @@ import {
 } from "./providerUsageLimits.ts";
 import { UsagePricing, UsageReadError, UsageSummary, UsageSummaryInput } from "./usage.ts";
 import {
+  PromptEnhanceError,
+  PromptEnhanceInput,
+  PromptEnhanceResult,
+} from "./promptEnhancement.ts";
+import {
   JiraConnectionResult,
+  JiraEnhanceTicketPromptInput,
+  JiraEnhanceTicketPromptResult,
   JiraError,
   JiraIssueDetail,
   JiraIssueInput,
@@ -451,6 +458,7 @@ export const WS_METHODS = {
   jiraListTransitions: "jira.listTransitions",
   jiraTransitionIssue: "jira.transitionIssue",
   jiraTestConnection: "jira.testConnection",
+  jiraEnhanceTicketPrompt: "jira.enhanceTicketPrompt",
   providerAuthComplete: "provider.auth.complete",
   chatGptReconnectProfile: "provider.chatgpt.reconnect-profile",
   chatGptImportProfile: "provider.chatgpt.import-profile",
@@ -487,6 +495,7 @@ export const WS_METHODS = {
 
   worktreeServicesWatch: "worktreeServices.watch",
   worktreeServicesControl: "worktreeServices.control",
+  promptEnhance: "prompt.enhance",
   terminalOpen: "terminal.open",
   terminalAttach: "terminal.attach",
   terminalObserve: "terminal.observe",
@@ -718,6 +727,12 @@ const WsJiraTransitionIssueRpc = Rpc.make(WS_METHODS.jiraTransitionIssue, {
 const WsJiraTestConnectionRpc = Rpc.make(WS_METHODS.jiraTestConnection, {
   payload: Schema.Struct({}),
   success: JiraConnectionResult,
+  error: JiraRpcError,
+});
+
+const WsJiraEnhanceTicketPromptRpc = Rpc.make(WS_METHODS.jiraEnhanceTicketPrompt, {
+  payload: JiraEnhanceTicketPromptInput,
+  success: JiraEnhanceTicketPromptResult,
   error: JiraRpcError,
 });
 
@@ -1598,6 +1613,12 @@ const WsWorktreeServicesControlRpc = Rpc.make(WS_METHODS.worktreeServicesControl
   error: Schema.Union([WorktreeServicesError, EnvironmentAuthorizationError]),
 });
 
+const WsPromptEnhanceRpc = Rpc.make(WS_METHODS.promptEnhance, {
+  payload: PromptEnhanceInput,
+  success: PromptEnhanceResult,
+  error: Schema.Union([PromptEnhanceError, EnvironmentAuthorizationError]),
+});
+
 const WsTerminalOpenRpc = Rpc.make(WS_METHODS.terminalOpen, {
   payload: TerminalOpenInput,
   success: TerminalSessionSnapshot,
@@ -2233,6 +2254,7 @@ export const ForkToolsRpcGroup = RpcGroup.make(
   WsVetUpdateFindingRpc,
   WsWorktreeServicesWatchRpc,
   WsWorktreeServicesControlRpc,
+  WsPromptEnhanceRpc,
 ).middleware(RpcScopeAuthorization);
 
 export const JiraRpcGroup = RpcGroup.make(
@@ -2241,6 +2263,7 @@ export const JiraRpcGroup = RpcGroup.make(
   WsJiraListTransitionsRpc,
   WsJiraTransitionIssueRpc,
   WsJiraTestConnectionRpc,
+  WsJiraEnhanceTicketPromptRpc,
 ).middleware(RpcScopeAuthorization);
 
 export const WsRpcGroup = WsCoreRpcGroup.merge(ForkToolsRpcGroup).merge(JiraRpcGroup);

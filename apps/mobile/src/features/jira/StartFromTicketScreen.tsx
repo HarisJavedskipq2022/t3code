@@ -36,6 +36,7 @@ import {
 } from "../layout/native-mail-search-toolbar";
 import { useNewTaskFlow } from "../threads/new-task-flow-provider";
 import { mergeTicketPrompt, setTicketDraft } from "./ticketDrafts";
+import { runPromptEnhancement } from "../promptEnhancement/promptEnhancementStore";
 
 const SEARCH_DELAY_MS = 250;
 const TITLE = "Jira ticket";
@@ -68,6 +69,9 @@ export function StartFromTicketRouteScreen() {
     reportFailure: false,
   });
   const getIssue = useAtomCommand(serverEnvironment.jiraGetIssue, { reportFailure: false });
+  const enhancePrompt = useAtomCommand(serverEnvironment.jiraEnhanceTicketPrompt, {
+    reportFailure: false,
+  });
   const [query, setQuery] = useState("");
   // Results remember the search they answer, so a newer query reads as loading.
   const [answered, setAnswered] = useState<{
@@ -76,6 +80,7 @@ export function StartFromTicketRouteScreen() {
   } | null>(null);
   const [openingKey, setOpeningKey] = useState<string | null>(null);
   const mounted = useRef(true);
+  // oxlint-disable-next-line t3code/react-effect-budget -- Track unmount so a slow ticket fetch does not update a closed screen.
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -86,6 +91,7 @@ export function StartFromTicketRouteScreen() {
   const request = `${environmentId}\u0000${query.trim()}`;
   const search = answered?.request === request ? answered.result : null;
 
+  // oxlint-disable-next-line t3code/react-effect-budget -- Debounce the Jira search for the typed query and drop answers to stale ones.
   useEffect(() => {
     if (environmentId === null || !canSearch) return;
     let cancelled = false;
@@ -118,7 +124,8 @@ export function StartFromTicketRouteScreen() {
 
   const openTicket = async (issue: JiraIssueSummary) => {
     const draftKey = flow.draftKey;
-    if (environmentId === null || draftKey === null || openingKey !== null) return;
+    const projectId = flow.selectedProject?.id;
+    if (environmentId === null || !projectId || draftKey === null || openingKey !== null) return;
     void Haptics.selectionAsync();
     setOpeningKey(issue.key);
     const detail = await getIssue({ environmentId, input: { key: issue.key } });
@@ -140,11 +147,19 @@ export function StartFromTicketRouteScreen() {
       ticket: linkedTicketOf(detail.value),
       branch: ticketBranchName(detail.value),
     });
-    setComposerDraftText(
-      draftKey,
-      mergeTicketPrompt(getComposerDraftSnapshot(draftKey).text, ticketPrompt(detail.value)),
-    );
+    const template = ticketPrompt(detail.value);
+    const filled = mergeTicketPrompt(getComposerDraftSnapshot(draftKey).text, template);
+    setComposerDraftText(draftKey, filled);
     navigation.goBack();
+    // The plain template is already a good draft, so a failed rewrite stays quiet.
+    void runPromptEnhancement({
+      draftKey,
+      replace: template,
+      request: () =>
+        enhancePrompt({ environmentId, input: { key: issue.key, projectId } }).then((result) =>
+          result._tag === "Success" ? result.value : { error: "" },
+        ),
+    });
   };
 
   const status = ((): { readonly text: string; readonly loading: boolean } | null => {

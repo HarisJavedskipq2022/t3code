@@ -72,6 +72,7 @@ import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 
 import { AppText as Text } from "../../components/ui/AppText";
 import { ComposerAttachmentButton } from "./ComposerAttachmentButton";
+import { EnhancePromptButton } from "../promptEnhancement/EnhancePromptButton";
 import {
   ComposerAttachmentStrip,
   ComposerAttachmentThumbnail,
@@ -891,6 +892,13 @@ export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps
                 supportsFiles={props.serverConfig !== null}
                 onPickMedia={props.onPickDraftMedia}
                 onPickFiles={props.onPickDraftFiles}
+              />
+              <EnhancePromptButton
+                draftKey={composerDraftKey}
+                environmentId={props.environmentId}
+                projectId={props.selectedThread.projectId}
+                disabled={isSubmissionLocked}
+                size={usesLargeControls ? "large" : "regular"}
               />
               <Animated.View
                 className="min-w-0 flex-1"

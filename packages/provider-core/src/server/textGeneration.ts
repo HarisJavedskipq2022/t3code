@@ -9,6 +9,7 @@ import type * as Effect from "effect/Effect";
 
 import type { TextGenerationPolicy } from "./textGenerationPolicy.ts";
 import type { ThreadTitleForkSource } from "./textGenerationPrompts.ts";
+import type { PromptEnhancementInput, PromptEnhancementResult } from "./promptEnhancement.ts";
 
 export interface CommitMessageGenerationInput {
   cwd: string;
@@ -117,4 +118,9 @@ export interface ProviderTextGeneration {
   readonly generateReviewGuide: (
     input: ReviewGuideGenerationInput,
   ) => Effect.Effect<ReviewGuideGenerationResult, TextGenerationError>;
+
+  /** HCode fork: optional, so providers without a shared runner leave drafts as written. */
+  readonly enhancePrompt?: (
+    input: PromptEnhancementInput,
+  ) => Effect.Effect<PromptEnhancementResult, TextGenerationError>;
 }

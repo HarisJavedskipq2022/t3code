@@ -271,6 +271,7 @@ import { useComposerImageGroups } from "./useComposerImageGroups";
 import { useComposerStash } from "./useComposerStash";
 import { useComposerContextImport } from "./useComposerContextImport";
 import { useComposerAttachmentIntake } from "./useComposerAttachmentIntake";
+import { EnhancePromptButton } from "../promptEnhancement/EnhancePromptButton";
 import {
   countPreparingComposerImages,
   usePreparingComposerImages,
@@ -3430,7 +3431,15 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   showMobilePendingAnswerActions && "hidden sm:flex",
                 )}
               >
-                {composerAttachButton ? <div className="me-2">{composerAttachButton}</div> : null}
+                <div className="me-2 flex items-center gap-0.5 empty:hidden">
+                  {composerAttachButton}
+                  <EnhancePromptButton
+                    target={composerDraftTarget}
+                    environmentId={environmentId}
+                    projectId={activeProjectId}
+                    hasPrompt={prompt.trim().length > 0}
+                  />
+                </div>
                 <div
                   data-chat-composer-actions="right"
                   data-chat-composer-transition-actions="true"

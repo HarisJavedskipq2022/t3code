@@ -31,6 +31,7 @@ import { toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { TicketTypeMark } from "./TicketTypeMark";
 import { useTicketDraft } from "./ticketDraftStore";
+import { usePromptEnhancementStatus } from "../promptEnhancement/promptEnhancementStore";
 
 type Transitions =
   | { readonly state: "idle" | "loading" }
@@ -75,6 +76,7 @@ export function ToolbarTicketChip({
   ticket,
   threadRef,
   pendingBranch,
+  enhancing = false,
   side = "top",
 }: {
   readonly environmentId: EnvironmentId;
@@ -82,6 +84,8 @@ export function ToolbarTicketChip({
   /** Null for a draft, which has nothing on the server to unlink yet. */
   readonly threadRef: ScopedThreadRef | null;
   readonly pendingBranch?: string | undefined;
+  /** The draft's prompt is being rewritten and will be replaced unless edited first. */
+  readonly enhancing?: boolean;
   readonly side?: "top" | "bottom";
 }) {
   const menuProps = useComposerMenuProps();
@@ -153,6 +157,7 @@ export function ToolbarTicketChip({
         {transitions.state === "done" ? (
           <span className="text-muted-foreground">· {transitions.status}</span>
         ) : null}
+        {enhancing ? <span className="text-muted-foreground">· Enhancing prompt…</span> : null}
         <ChevronDownIcon className="size-3 shrink-0 opacity-50" aria-hidden />
       </MenuTrigger>
       <MenuPopup align="end" side={side} className="w-72" {...menuProps}>
@@ -164,6 +169,11 @@ export function ToolbarTicketChip({
           {pendingBranch ? (
             <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
               New branch {pendingBranch}
+            </p>
+          ) : null}
+          {enhancing ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Rewriting the prompt with your text generation model. Edit it to keep this version.
             </p>
           ) : null}
         </div>
@@ -226,6 +236,7 @@ export function BranchToolbarTicket({
   const threadRef = scopeThreadRef(environmentId, threadId);
   const serverTicket = useQuietThreadShell(threadRef)?.linkedTicket ?? null;
   const draft = useTicketDraft(threadId);
+  const enhancing = usePromptEnhancementStatus(threadRef) === "running";
   if (serverTicket) {
     return (
       <ToolbarTicketChip
@@ -242,6 +253,7 @@ export function BranchToolbarTicket({
         ticket={draft.ticket}
         threadRef={null}
         pendingBranch={draft.branch}
+        enhancing={enhancing}
       />
     );
   }

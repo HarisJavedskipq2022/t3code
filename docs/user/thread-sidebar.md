@@ -45,9 +45,13 @@ Then click the ticket button next to **New thread** in the sidebar, **or start f
 ticket** under a new thread's heading, or **Start from Jira ticket…** in the command palette. It lists the open tickets
 assigned to you; type a key such as `SHP-4158` or words to search. Pick a project and press
 **Open draft**: you get a new worktree draft on a branch named after the ticket (`fix/` for
-bugs, `feat/` otherwise) with the ticket's description and attachment links as the message.
-Edit it before you send. On mobile, tap **Start from a Jira ticket** under a new task's
-heading; picking a ticket fills that task the same way.
+bugs, `feat/` otherwise). The message starts as the ticket's description, acceptance criteria,
+latest comments, and attachment links. Your text generation model (**Settings → General →
+Text generation**) then rewrites it into a structured prompt while the ticket chip says
+_Enhancing prompt…_. Start typing to keep the first version instead. If the model fails or
+takes longer than a minute, the first version stays. Edit the message before you send. On mobile, tap
+**Start from a Jira ticket** under a new task's heading; picking a ticket fills that task the
+same way.
 
 The ticket shows on the thread's sidebar row and in the branch toolbar, where its menu moves
 the ticket to another status, opens it in Jira, or unlinks it. When the thread's first pull

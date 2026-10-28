@@ -1,4 +1,4 @@
-import type { JiraIssueDetail, JiraIssueSummary, ThreadLinkedTicket } from "@t3tools/contracts";
+import type { JiraIssueSummary, ThreadLinkedTicket } from "@t3tools/contracts";
 import { sanitizeBranchFragment } from "@t3tools/shared/git";
 
 const SLUG_WORDS = 6;
@@ -29,22 +29,7 @@ export function linkedTicketOf(issue: JiraIssueSummary): ThreadLinkedTicket {
   };
 }
 
-/** The first message: what to do, then the ticket as the reporter wrote it. */
-export function ticketPrompt(issue: JiraIssueDetail): string {
-  const verb = issue.isBug ? "Fix" : "Implement";
-  const sections = [
-    `${verb} ${issue.key}: ${issue.title}`,
-    issue.description.trim(),
-    issue.attachments.length > 0
-      ? [
-          "Attachments:",
-          ...issue.attachments.map((attachment) => `- ${attachment.filename}: ${attachment.url}`),
-        ].join("\n")
-      : "",
-    `Ticket: ${issue.url}`,
-  ];
-  return sections.filter((section) => section.length > 0).join("\n\n");
-}
+export { ticketPrompt } from "@t3tools/shared/jiraTicketPrompt";
 
 export interface TicketDraft {
   readonly ticket: ThreadLinkedTicket;

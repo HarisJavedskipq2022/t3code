@@ -1,5 +1,6 @@
 import {
   JiraError,
+  type JiraIssueComment,
   type JiraIssueDetail,
   type JiraIssueStatusCategory,
   type JiraIssueSummary,
@@ -22,6 +23,9 @@ const SEARCH_LIMIT = 25;
 const ISSUE_KEY = /^[A-Z][A-Z0-9_]+-\d+$/;
 const SUMMARY_FIELDS = ["summary", "status", "issuetype", "assignee"];
 const ERROR_DETAIL_LIMIT = 500;
+const COMMENT_LIMIT = 5;
+const COMMENT_LENGTH = 1_500;
+const ACCEPTANCE_CRITERIA_FIELD = /acceptance criteria|definition of done/i;
 
 const OptionalName = Schema.optional(Schema.Struct({ name: Schema.optional(Schema.String) }));
 
@@ -46,10 +50,31 @@ const IssueFields = Schema.Struct({
       }),
     ),
   ),
+  comment: Schema.optional(
+    Schema.Struct({
+      comments: Schema.optional(
+        Schema.Array(
+          Schema.Struct({
+            author: Schema.optional(Schema.Struct({ displayName: Schema.optional(Schema.String) })),
+            created: Schema.optional(Schema.String),
+            body: Schema.optional(Schema.Unknown),
+          }),
+        ),
+      ),
+    }),
+  ),
 });
 
 const Issue = Schema.Struct({ key: Schema.String, fields: IssueFields });
 type Issue = typeof Issue.Type;
+
+// Acceptance criteria live in a custom field whose id differs per site, so `names` finds it.
+const DetailIssue = Schema.Struct({
+  key: Schema.String,
+  fields: Schema.StructWithRest(IssueFields, [Schema.Record(Schema.String, Schema.Unknown)]),
+  names: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+});
+type DetailIssue = typeof DetailIssue.Type;
 
 const SearchResponse = Schema.Struct({ issues: Schema.Array(Issue) });
 const TransitionsResponse = Schema.Struct({
@@ -116,10 +141,36 @@ function issueSummary(siteUrl: string, issue: Issue): JiraIssueSummary {
   };
 }
 
-function issueDetail(siteUrl: string, issue: Issue): JiraIssueDetail {
+function acceptanceCriteriaOf(issue: DetailIssue): string {
+  return Object.entries(issue.names ?? {})
+    .filter(([id, name]) => id.startsWith("customfield_") && ACCEPTANCE_CRITERIA_FIELD.test(name))
+    .map(([id]) => jiraDocumentToText(issue.fields[id] ?? ""))
+    .filter((text) => text.length > 0)
+    .join("\n\n");
+}
+
+function commentsOf(issue: DetailIssue): ReadonlyArray<JiraIssueComment> {
+  return (issue.fields.comment?.comments ?? [])
+    .flatMap((comment) => {
+      const body = jiraDocumentToText(comment.body ?? "");
+      if (body.length === 0) return [];
+      return [
+        {
+          author: comment.author?.displayName?.trim() ?? "",
+          created: comment.created?.trim() ?? "",
+          body: body.length > COMMENT_LENGTH ? `${body.slice(0, COMMENT_LENGTH).trimEnd()}…` : body,
+        },
+      ];
+    })
+    .slice(-COMMENT_LIMIT);
+}
+
+function issueDetail(siteUrl: string, issue: DetailIssue): JiraIssueDetail {
   return {
     ...issueSummary(siteUrl, issue),
     description: jiraDocumentToText(issue.fields.description ?? ""),
+    acceptanceCriteria: acceptanceCriteriaOf(issue),
+    comments: commentsOf(issue),
     attachments: (issue.fields.attachment ?? []).flatMap((attachment) =>
       attachment.content ? [{ filename: attachment.filename ?? "", url: attachment.content }] : [],
     ),
@@ -218,11 +269,14 @@ export const makeJiraApi = Effect.gen(function* () {
   const issuePath = (key: string) => `/rest/api/3/issue/${encodeURIComponent(key)}`;
 
   const getIssue = (credentials: JiraCredentials, key: string) =>
-    sendJson(
-      credentials,
-      Issue,
-      get(`${issuePath(key)}?fields=${[...SUMMARY_FIELDS, "description", "attachment"].join(",")}`),
-    ).pipe(Effect.map(({ siteUrl, body }) => issueDetail(siteUrl, body)));
+    sendJson(credentials, DetailIssue, get(`${issuePath(key)}?fields=*all&expand=names`)).pipe(
+      Effect.map(({ siteUrl, body }) => issueDetail(siteUrl, body)),
+    );
+
+  const getIssueSummary = (credentials: JiraCredentials, key: string) =>
+    sendJson(credentials, Issue, get(`${issuePath(key)}?fields=${SUMMARY_FIELDS.join(",")}`)).pipe(
+      Effect.map(({ siteUrl, body }) => issueSummary(siteUrl, body)),
+    );
 
   const searchJql = (credentials: JiraCredentials, jql: string) =>
     sendJson(
@@ -237,10 +291,8 @@ export const makeJiraApi = Effect.gen(function* () {
     const key = jiraIssueKeyOf(query);
     // A key goes straight to the issue: JQL rejects a `key =` clause naming a missing issue.
     if (key !== null) {
-      return getIssue(credentials, key).pipe(
-        Effect.map(({ description: _description, attachments: _attachments, ...summary }) => [
-          summary,
-        ]),
+      return getIssueSummary(credentials, key).pipe(
+        Effect.map((summary) => [summary]),
         Effect.catchIf(
           (error) => error.reason === "notFound",
           () => Effect.succeed([]),
@@ -297,6 +349,7 @@ export const makeJiraApi = Effect.gen(function* () {
 
   return {
     getIssue,
+    getIssueSummary,
     searchIssues,
     searchJql,
     listTransitions,

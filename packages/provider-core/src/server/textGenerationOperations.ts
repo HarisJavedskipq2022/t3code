@@ -13,6 +13,7 @@ import {
   buildReviewGuidePrompt,
   buildThreadTitlePrompt,
 } from "./textGenerationPrompts.ts";
+import { makeEnhancePrompt } from "./promptEnhancement.ts";
 import {
   sanitizeCommitSubject,
   sanitizePrTitle,
@@ -173,5 +174,6 @@ export function fromRunner(name: string, run: Runner): ProviderTextGeneration {
     generateBranchName,
     generateThreadTitle,
     generateReviewGuide,
+    enhancePrompt: makeEnhancePrompt(name, run),
   } satisfies ProviderTextGeneration;
 }
