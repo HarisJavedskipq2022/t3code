@@ -1,21 +1,14 @@
-/* HCode's one brand color, on the sidebar mark and the open thread's edge;
+/* HCode's one brand color, on the sidebar mark and nightly notice;
    themes keep their own accents everywhere else. */
 :root {
   --fork-brand: #f2b64e;
   --fork-brand-ink: #2a1d05;
 }
 
-@layer components {
-  [data-thread-item] [aria-current="page"]::before {
-    content: "";
-    position: absolute;
-    inset-block: 6px;
-    left: 0;
-    width: 2px;
-    border-radius: 0 2px 2px 0;
-    background: var(--fork-brand);
-    pointer-events: none;
-  }
+/* A soft hairline instead of the light theme's grey ring, the same in every
+   theme. Unlayered to beat the ring utilities; keyboard focus keeps its ring. */
+[data-thread-item] [aria-current="page"]:not(:focus-visible) {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sidebar-foreground) 9%, transparent);
 }
 
 /* Meta text is where counts live (ages, limits, durations, tokens): steady
