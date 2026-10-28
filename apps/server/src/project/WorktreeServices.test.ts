@@ -125,6 +125,7 @@ function harness(initial = [script()]) {
           })),
         }),
         Layer.mock(Ports.PortDiscovery)({
+          trackAgent: () => () => undefined,
           inspectListeners: () =>
             Effect.sync(() => {
               h.inspections++;

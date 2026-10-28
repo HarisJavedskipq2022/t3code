@@ -11,13 +11,14 @@ import { ProjectFavicon } from "../ProjectFavicon";
 import {
   planSidebarThreadDrop,
   resolveSidebarThreadStatus,
-  type SidebarDropTarget,
+  type resolveSidebarDropTarget,
   type SidebarListItem,
   type SidebarListMarker,
   type SidebarSection,
 } from "../Sidebar.logic";
 
 type ThreadItem = Extract<SidebarListItem, { kind: "thread" }>;
+type SidebarDropTarget = NonNullable<ReturnType<typeof resolveSidebarDropTarget>>;
 type ProjectRef = { readonly environmentId: string; readonly projectId: string };
 
 const MARKER_PREFIX = "project-group:";

@@ -1,11 +1,5 @@
 import { isAtomCommandInterrupted } from "@t3tools/client-runtime/state/runtime";
-import type {
-  EnvironmentId,
-  ProjectScript,
-  RunId,
-  ScopedThreadRef,
-  ThreadId,
-} from "@t3tools/contracts";
+import type { EnvironmentId, ProjectScript, ScopedThreadRef, ThreadId } from "@t3tools/contracts";
 
 import { resolveDiscoveredServerUrl } from "../../browser/browserTargetResolver";
 import { openUrlInPreview } from "../../browser/openFileInPreview";
@@ -17,21 +11,12 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { worktreeServicesEnvironment } from "../../state/worktreeServices";
 
 /**
- * HCode's additions to ChatView: app services, the composer's working status and the
- * Vet surface. Kept here so ChatView carries only call sites.
+ * HCode's additions to ChatView: app services and the Vet surface. Kept here so ChatView carries only call sites.
  */
 export function useForkChatViewExtras(input: {
   environmentId: EnvironmentId;
   activeThreadRef: ScopedThreadRef | null;
   vetAvailable: boolean;
-  isWorking: boolean;
-  isPreparingWorktree: boolean;
-  isCompacting: boolean;
-  paintOnlyDisplayedTimeline: boolean;
-  activeWorkStartedAt: string | null;
-  activeRunId: RunId | null;
-  /** The thread whose live turn items name the working step. */
-  threadDetailRef: ScopedThreadRef | null;
   setThreadError: (threadId: ThreadId | null, error: string | null) => void;
 }) {
   const { environmentId, activeThreadRef, setThreadError } = input;
@@ -66,22 +51,6 @@ export function useForkChatViewExtras(input: {
     }
   };
 
-  // ChatView reads quiet turn items without streamed text, so the row reads the run's live
-  // items itself unless a fixed step applies; a text delta re-renders only the row.
-  const composerWorkingStatus =
-    input.isWorking && !input.paintOnlyDisplayedTimeline
-      ? {
-          step: input.isPreparingWorktree
-            ? "Setting up worktree"
-            : input.isCompacting
-              ? "Compacting conversation"
-              : null,
-          threadRef: input.threadDetailRef,
-          runId: input.activeRunId,
-          startedAt: input.activeWorkStartedAt,
-        }
-      : null;
-
   const addVetSurface = () => {
     if (!activeThreadRef || !input.vetAvailable) return;
     useRightPanelStore.getState().open(activeThreadRef, "vet");
@@ -90,7 +59,6 @@ export function useForkChatViewExtras(input: {
 
   return {
     startAppService,
-    composerWorkingStatus,
     vetTabProps: { onAddVet: addVetSurfaceStable, vetAvailable: input.vetAvailable },
   };
 }

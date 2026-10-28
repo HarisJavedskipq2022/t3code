@@ -205,16 +205,12 @@ function useSplitWidth(rowRef: React.RefObject<HTMLDivElement | null>) {
     const row = rowRef.current;
     const pane = event.currentTarget.parentElement;
     if (!row || !pane) return null;
-    const clamp = (value: number) =>
-      Math.max(
-        SPLIT_PANE_MIN_WIDTH,
-        Math.min(row.clientWidth - SPLIT_PANE_MIN_WIDTH, Math.round(value)),
-      );
     return {
       width: pane.getBoundingClientRect().width,
       edge: "left",
+      bounds: { min: SPLIT_PANE_MIN_WIDTH, max: row.clientWidth - SPLIT_PANE_MIN_WIDTH },
       resize(value) {
-        const width = clamp(value);
+        const width = Math.round(value);
         row.style.setProperty(SPLIT_WIDTH_PROPERTY, `${width}px`);
         return width;
       },

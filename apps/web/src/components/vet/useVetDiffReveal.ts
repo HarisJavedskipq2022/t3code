@@ -1,10 +1,11 @@
 import type { ScopedThreadRef } from "@t3tools/contracts";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import type { DraftId } from "~/composerDraftStore";
 import type { DiffPanelSelection } from "~/diffPanelStore";
 
 import type { AnnotatableCodeViewHandle } from "../diffs/AnnotatableCodeView";
+import type { useCodeViewFileReveal } from "../diffs/useCodeViewFileReveal";
 import { useVetLineNotes } from "./VetPanel";
 
 /** The branch-diff file and line a Vet finding asked to show, and the findings to pin. */
@@ -27,13 +28,21 @@ export function useVetDiffReveal(
   };
 }
 
-/** The panel skips its own file scroll for a line reveal, so this one scrolls to the line. */
+/**
+ * The panel skips its own file scroll for a line reveal, so this one scrolls to the line.
+ * Returns the viewer ref, which also attaches the panel's file reveal.
+ */
 export function useVetLineScroll(
-  codeView: AnnotatableCodeViewHandle | null,
+  fileReveal: ReturnType<typeof useCodeViewFileReveal>,
   codeViewMountKey: string,
   fileKey: string | null,
   reveal: { readonly requestId: number; readonly line: number | null },
 ) {
+  const [codeView, setCodeView] = useState<AnnotatableCodeViewHandle | null>(null);
+  const [attach] = useState(() => (next: AnnotatableCodeViewHandle | null) => {
+    fileReveal.attach(next);
+    setCodeView(next);
+  });
   const { requestId, line } = reveal;
   useEffect(() => {
     if (line === null || !fileKey || !codeView?.getInstance()) return;
@@ -48,4 +57,5 @@ export function useVetLineScroll(
     });
     // oxlint-disable-next-line react/exhaustive-effect-dependencies -- A remounted viewer or a repeated reveal request scrolls to the same line again.
   }, [codeView, codeViewMountKey, fileKey, requestId, line]);
+  return attach;
 }

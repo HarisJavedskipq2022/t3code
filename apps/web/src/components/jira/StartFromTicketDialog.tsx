@@ -218,7 +218,7 @@ function StartFromTicketDialog({
                       variant="outline"
                       onClick={() => {
                         closeStartFromTicket();
-                        void navigate({ to: "/settings/integrations" });
+                        void navigate({ to: "/settings/browser" });
                       }}
                     >
                       Open Jira settings

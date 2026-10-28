@@ -52,7 +52,7 @@ const make = Effect.gen(function* () {
         request.responseCapability.type === "message"
           ? `Delegated task ${task.id} asked a question and is still working.`
           : `Delegated task ${task.id} is blocked on a question and cannot continue until it is answered.`;
-      text = `${situation} Read it with t3_pending_request_read using threadId ${task.childThreadId} and requestId ${request.id}. Answer it with t3_pending_request_respond when the answer follows from the task or the user's instructions; otherwise ask the user, then answer it. If it is no longer pending, it was answered or dismissed.`;
+      text = `${situation} Read it with t3_pending_request action read, threadId ${task.childThreadId}, and requestId ${request.id}. Answer it with action respond when the answer follows from the task or the user's instructions; otherwise ask the user, then answer it. If it is no longer pending, it was answered or dismissed.`;
       summary = `${name} has a question`;
     } else {
       text = `Delegated task ${task.id} needs ${runtimeRequestNeed(request.kind)} and cannot continue until the user handles it. You cannot approve it. Tell the user the task is waiting on them and that they can approve or decline it in the task's thread (threadId ${task.childThreadId}). If it is no longer pending, it was handled.`;

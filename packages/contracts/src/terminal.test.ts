@@ -6,7 +6,6 @@ import {
   TerminalError,
   TerminalOpenInput,
   TerminalProviderEnvironmentError,
-  TerminalRestartInput,
   TerminalStopError,
 } from "./terminal.ts";
 import { ProviderInstanceId } from "./providerInstance.ts";
@@ -100,19 +99,5 @@ describe("TerminalOpenInput", () => {
         }),
       ).toBe(false);
     }
-  });
-});
-
-describe("TerminalAttachInput", () => {
-  it("accepts a bounded command for a command-mode restart", () => {
-    const parsed = decodeSync(TerminalRestartInput, {
-      threadId: "thread-1",
-      terminalId: DEFAULT_TERMINAL_ID,
-      cwd: "/tmp/project",
-      cols: 100,
-      rows: 24,
-      command: "npm run dev",
-    });
-    expect(parsed.command).toBe("npm run dev");
   });
 });
