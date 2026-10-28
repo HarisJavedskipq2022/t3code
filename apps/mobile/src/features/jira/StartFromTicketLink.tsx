@@ -5,6 +5,8 @@ import { Keyboard } from "react-native";
 
 import { ComposerInlineControl } from "../../components/ComposerToolbar";
 import { useEnvironmentServerConfig } from "../../state/entities";
+import { useNewTaskFlow } from "../threads/new-task-flow-provider";
+import { usePromptEnhancementStatus } from "../promptEnhancement/promptEnhancementStore";
 
 /** Under the new-task headline, for a project whose environment has Jira connected. */
 export function StartFromTicketLink(props: {
@@ -12,6 +14,7 @@ export function StartFromTicketLink(props: {
   readonly disabled: boolean;
 }) {
   const navigation = useNavigation();
+  const enhancing = usePromptEnhancementStatus(useNewTaskFlow().draftKey) === "running";
   const configured = isJiraConfigured(
     useEnvironmentServerConfig(props.environmentId)?.settings.jira,
   );
@@ -22,7 +25,7 @@ export function StartFromTicketLink(props: {
       chevronDirection="right"
       disabled={props.disabled}
       icon="ticket"
-      label="Start from a Jira ticket"
+      label={enhancing ? "Enhancing ticket prompt…" : "Start from a Jira ticket"}
       maxWidth={260}
       onPress={() => {
         Keyboard.dismiss();

@@ -34,6 +34,7 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.pullRequestsGenerateReviewGuide]: AuthOrchestrationOperateScope,
   // A vet review runs a model on this environment, like a review guide.
   [WS_METHODS.vetRun]: AuthOrchestrationOperateScope,
+  [WS_METHODS.promptEnhance]: AuthOrchestrationOperateScope,
   [WS_METHODS.vetCancel]: AuthOrchestrationOperateScope,
   [WS_METHODS.vetUpdateFinding]: AuthOrchestrationOperateScope,
   [WS_METHODS.jiraTransitionIssue]: AuthOrchestrationOperateScope,

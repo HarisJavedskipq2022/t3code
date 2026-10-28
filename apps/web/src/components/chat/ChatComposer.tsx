@@ -291,6 +291,7 @@ import { useComposerImageGroups } from "./useComposerImageGroups";
 import { useComposerStash } from "./useComposerStash";
 import { useComposerContextImport } from "./useComposerContextImport";
 import { useComposerAttachmentIntake } from "./useComposerAttachmentIntake";
+import { EnhancePromptButton } from "../promptEnhancement/EnhancePromptButton";
 import {
   countPreparingComposerImages,
   usePreparingComposerImages,
@@ -3894,6 +3895,12 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   }
                   className="flex shrink-0 flex-nowrap items-center justify-end gap-2"
                 >
+                  <EnhancePromptButton
+                    target={composerDraftTarget}
+                    environmentId={environmentId}
+                    projectId={activeProjectId}
+                    hasPrompt={prompt.trim().length > 0}
+                  />
                   {composerAttachButton}
                   <ComposerFooterPrimaryActions
                     compact={isComposerResting || isComposerPrimaryActionsCompact}

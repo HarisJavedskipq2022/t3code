@@ -22,6 +22,7 @@ export * from "./providerRuntime.ts";
 export * from "./providerUsageLimits.ts";
 export * from "./usageLimitSourceId.ts";
 export * from "./jira.ts";
+export * from "./promptEnhancement.ts";
 export * from "./providerPolicy.ts";
 export * from "./modelSelection.ts";
 export * from "./chatAttachment.ts";

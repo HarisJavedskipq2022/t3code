@@ -479,6 +479,10 @@
       "types": "./src/jiraTicketDraft.ts",
       "default": "./src/jiraTicketDraft.ts"
     },
+    "./prompt-enhancement": {
+      "types": "./src/promptEnhancement.ts",
+      "default": "./src/promptEnhancement.ts"
+    },
     "./state/agent-step": {
       "types": "./src/state/agentStep.ts",
       "default": "./src/state/agentStep.ts"

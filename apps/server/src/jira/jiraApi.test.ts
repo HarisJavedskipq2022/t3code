@@ -82,6 +82,53 @@ describe("Jira API", () => {
     }),
   );
 
+  it.effect("reads acceptance criteria by field name and the latest comments", () =>
+    Effect.gen(function* () {
+      const paragraph = (text: string) => ({
+        type: "doc",
+        content: [{ type: "paragraph", content: [{ type: "text", text }] }],
+      });
+      const test = fixture(() => ({
+        status: 200,
+        body: {
+          ...issue("SHP-4158", {
+            description: paragraph("Card never leaves loading."),
+            customfield_10034: paragraph("Retrying prints the label"),
+            customfield_10050: "Story points are not criteria",
+            comment: {
+              comments: [
+                ...Array.from({ length: 6 }, (_, index) => ({
+                  author: { displayName: "Dana" },
+                  created: `2026-10-2${index}T09:00:00.000+0000`,
+                  body: paragraph(`Note ${index}`),
+                })),
+                { author: { displayName: "Sam" }, body: paragraph("x".repeat(2_000)) },
+                { author: { displayName: "Bot" }, body: paragraph("  ") },
+              ],
+            },
+          }),
+          names: { customfield_10034: "Acceptance Criteria", customfield_10050: "Story Points" },
+        },
+      }));
+      const detail = yield* (yield* test.api).getIssue(credentials, "SHP-4158");
+      expect(test.requests[0]?.path).toBe("/rest/api/3/issue/SHP-4158?fields=*all&expand=names");
+      expect(detail.acceptanceCriteria).toBe("Retrying prints the label");
+      expect(detail.comments.map((comment) => comment.body.slice(0, 6))).toEqual([
+        "Note 2",
+        "Note 3",
+        "Note 4",
+        "Note 5",
+        "xxxxxx",
+      ]);
+      expect(detail.comments[0]).toEqual({
+        author: "Dana",
+        created: "2026-10-22T09:00:00.000+0000",
+        body: "Note 2",
+      });
+      expect(detail.comments[4]?.body).toHaveLength(1_501);
+    }),
+  );
+
   it.effect("searches text with escaped JQL", () =>
     Effect.gen(function* () {
       const test = fixture(() => ({

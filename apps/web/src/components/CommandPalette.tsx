@@ -1,4 +1,5 @@
 import { openStartFromTicket } from "./jira/StartFromTicketDialog";
+import { enhanceActiveComposerPrompt } from "./promptEnhancement/EnhancePromptButton";
 import { threadPullRequestLinkMode } from "@t3tools/client-runtime/thread-pull-request-compatibility";
 import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
 
@@ -67,6 +68,7 @@ import {
   PaletteIcon,
   RotateCcwIcon,
   SettingsIcon,
+  SparklesIcon,
   SquarePenIcon,
   TicketIcon,
   TextSearchIcon,
@@ -1252,6 +1254,18 @@ function OpenCommandPaletteDialog(props: {
       groups: [{ value: "projects", label: "Projects", items: projectThreadItems }],
     });
   }
+
+  actionItems.push({
+    kind: "action",
+    value: "action:enhance-prompt",
+    searchTerms: ["enhance", "rewrite", "improve", "prompt", "draft", "code"],
+    title: "Enhance prompt",
+    icon: <SparklesIcon className={ITEM_ICON_CLASS} />,
+    shortcutCommand: "composer.enhancePrompt",
+    run: async () => {
+      enhanceActiveComposerPrompt();
+    },
+  });
 
   if (projects.length > 0) {
     actionItems.push({

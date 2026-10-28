@@ -34,6 +34,7 @@ import {
   ticketPrompt,
 } from "@t3tools/client-runtime/jira-ticket-draft";
 import { useTicketDraftStore } from "./ticketDraftStore";
+import { runPromptEnhancement } from "../promptEnhancement/promptEnhancementStore";
 
 const SEARCH_DELAY_MS = 250;
 
@@ -88,6 +89,9 @@ function StartFromTicketDialog({
     reportFailure: false,
   });
   const getIssue = useAtomCommand(serverEnvironment.jiraGetIssue, { reportFailure: false });
+  const enhancePrompt = useAtomCommand(serverEnvironment.jiraEnhanceTicketPrompt, {
+    reportFailure: false,
+  });
   const [selectedProjectKey, setSelectedProjectKey] = useState(() => {
     const preferred = initialProject ?? projects[0];
     return preferred
@@ -118,6 +122,7 @@ function StartFromTicketDialog({
     { error: null, busy: false },
   );
 
+  // oxlint-disable-next-line t3code/react-effect-budget -- Debounce the Jira search for the typed query and drop answers to stale ones.
   useEffect(() => {
     if (environmentId === null) return;
     let cancelled = false;
@@ -169,8 +174,23 @@ function StartFromTicketDialog({
       ticket: linkedTicketOf(detail.value),
       branch: ticketBranchName(detail.value),
     });
-    useComposerDraftStore.getState().setPrompt(opened.draftId, ticketPrompt(detail.value));
+    const template = ticketPrompt(detail.value);
+    useComposerDraftStore.getState().setPrompt(opened.draftId, template);
     closeStartFromTicket();
+    // The plain template is already a good draft, so a failed rewrite stays quiet.
+    void runPromptEnhancement({
+      target: opened.draftId,
+      replace: template,
+      request: () =>
+        enhancePrompt({
+          environmentId,
+          input: { key: issue.key, projectId: project.id },
+        }).then((result) =>
+          result._tag === "Success"
+            ? { prompt: result.value.prompt, readCode: false }
+            : { error: "" },
+        ),
+    });
   };
 
   return (

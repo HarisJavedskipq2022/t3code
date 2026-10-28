@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import { TrimmedNonEmptyString, TrimmedString } from "./baseSchemas.ts";
+import { ProjectId, TrimmedNonEmptyString, TrimmedString } from "./baseSchemas.ts";
 
 const emptyByDefault = TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed("")));
 
@@ -65,10 +65,22 @@ export const JiraIssueAttachment = Schema.Struct({
 });
 export type JiraIssueAttachment = typeof JiraIssueAttachment.Type;
 
+export const JiraIssueComment = Schema.Struct({
+  author: TrimmedString,
+  /** ISO timestamp, as Jira sends it. */
+  created: TrimmedString,
+  body: Schema.String,
+});
+export type JiraIssueComment = typeof JiraIssueComment.Type;
+
 export const JiraIssueDetail = Schema.Struct({
   ...JiraIssueSummary.fields,
   /** Plain text converted from Jira's document format. */
   description: Schema.String,
+  /** From custom fields named like "Acceptance criteria"; empty when the site has none. */
+  acceptanceCriteria: Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  /** The latest comments, oldest first. */
+  comments: Schema.Array(JiraIssueComment).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
   attachments: Schema.Array(JiraIssueAttachment),
 });
 export type JiraIssueDetail = typeof JiraIssueDetail.Type;
@@ -98,6 +110,16 @@ export const JiraTransitionIssueInput = Schema.Struct({
   transitionId: TrimmedNonEmptyString,
 });
 export type JiraTransitionIssueInput = typeof JiraTransitionIssueInput.Type;
+
+/** The project's checkout is where the model reads the ticket, like a thread title. */
+export const JiraEnhanceTicketPromptInput = Schema.Struct({
+  key: JiraIssueKey,
+  projectId: ProjectId,
+});
+export type JiraEnhanceTicketPromptInput = typeof JiraEnhanceTicketPromptInput.Type;
+
+export const JiraEnhanceTicketPromptResult = Schema.Struct({ prompt: TrimmedNonEmptyString });
+export type JiraEnhanceTicketPromptResult = typeof JiraEnhanceTicketPromptResult.Type;
 
 export const JiraConnectionResult = Schema.Struct({ displayName: TrimmedString });
 export type JiraConnectionResult = typeof JiraConnectionResult.Type;

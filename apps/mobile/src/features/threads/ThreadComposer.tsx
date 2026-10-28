@@ -67,6 +67,7 @@ import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 
 import { AppText as Text } from "../../components/ui/AppText";
 import { ComposerAttachmentButton } from "./ComposerAttachmentButton";
+import { EnhancePromptButton } from "../promptEnhancement/EnhancePromptButton";
 import {
   ComposerAttachmentStrip,
   ComposerAttachmentThumbnail,
@@ -1214,15 +1215,24 @@ export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps
                   />
                 ) : (
                   <View className="min-w-0 flex-1 flex-row items-center justify-between">
-                    <ComposerAttachmentButton
-                      size={hasSidebarTabBar ? "large" : "regular"}
-                      disabled={isSubmissionLocked}
-                      supportsFiles={Boolean(
-                        props.serverConfig?.environment.capabilities.fileAttachments,
-                      )}
-                      onPickMedia={props.onPickDraftMedia}
-                      onPickFiles={props.onPickDraftFiles}
-                    />
+                    <View className="flex-row items-center">
+                      <ComposerAttachmentButton
+                        size={hasSidebarTabBar ? "large" : "regular"}
+                        disabled={isSubmissionLocked}
+                        supportsFiles={Boolean(
+                          props.serverConfig?.environment.capabilities.fileAttachments,
+                        )}
+                        onPickMedia={props.onPickDraftMedia}
+                        onPickFiles={props.onPickDraftFiles}
+                      />
+                      <EnhancePromptButton
+                        draftKey={composerDraftKey}
+                        environmentId={props.environmentId}
+                        projectId={props.selectedThread.projectId}
+                        disabled={isSubmissionLocked}
+                        size={hasSidebarTabBar ? "large" : "regular"}
+                      />
+                    </View>
                     {modelControl}
                   </View>
                 )}

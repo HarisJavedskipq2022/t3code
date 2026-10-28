@@ -105,7 +105,7 @@ const make = Effect.gen(function* () {
   ) {
     const login = yield* credentials;
     yield* api.transitionIssue(login, input.key, input.transitionId);
-    return yield* api.getIssue(login, input.key);
+    return yield* api.getIssueSummary(login, input.key);
   });
 
   const testConnection = credentials.pipe(Effect.flatMap(api.myself));
@@ -120,7 +120,7 @@ const make = Effect.gen(function* () {
     }
     const target = input.stage === "opened" ? jira.openedTransition : jira.mergedTransition;
     if (!target) return;
-    const issue = yield* api.getIssue(jira, input.key);
+    const issue = yield* api.getIssueSummary(jira, input.key);
     if (issue.status.toLowerCase() === target.toLowerCase()) return;
     const transition = findTransitionTo(yield* api.listTransitions(jira, input.key), target);
     if (transition === null) {

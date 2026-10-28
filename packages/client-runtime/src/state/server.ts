@@ -1355,6 +1355,14 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:server:jira-test-connection",
       tag: WS_METHODS.jiraTestConnection,
     }),
+    jiraEnhanceTicketPrompt: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:jira-enhance-ticket-prompt",
+      tag: WS_METHODS.jiraEnhanceTicketPrompt,
+    }),
+    promptEnhance: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:prompt-enhance",
+      tag: WS_METHODS.promptEnhance,
+    }),
     refreshProviders: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:refresh-providers",
       tag: WS_METHODS.serverRefreshProviders,

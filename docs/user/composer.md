@@ -173,6 +173,20 @@ Stashes containing uploaded files must be restored in their original environment
 Those files are retained for 24 hours. After an upload expires, restore the prompt
 and use **Attach again** or remove the missing file before sending.
 
+## Enhance a prompt
+
+Write a rough draft, then press the sparkles button beside the attach button. You can also press
+`Cmd+Option+E` on macOS or `Ctrl+Alt+E` on Windows and Linux, or choose **Enhance prompt** in the
+command palette. Your text generation model (**Settings → General → Text generation**) reads the
+project's code read-only. It then rewrites the draft into a structured prompt with a goal, context,
+acceptance criteria, constraints, and the files to look at. Attachments in the draft stay where
+they are.
+
+Reading the code can take a minute or two. If you keep typing meanwhile, your text stays and the
+rewrite is dropped. After a rewrite, the button becomes **Undo enhance** until you edit the draft.
+Claude and Codex read the code. Other providers rewrite from the draft alone, and the app tells you
+when that happens.
+
 ## Voice input on iPhone
 
 On supported iPhones with iOS 26 or later, use the composer's microphone to record,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { ticketBranchName, ticketPrompt, withTicketBootstrap } from "./jiraTicketDraft.ts";
+import { ticketBranchName, withTicketBootstrap } from "./jiraTicketDraft.ts";
 
 const issue = {
   key: "SHP-4158",
@@ -10,8 +10,6 @@ const issue = {
   isBug: true,
   status: "To Do",
   statusCategory: "new" as const,
-  description: "When the carrier API times out, the card never leaves the loading state.",
-  attachments: [{ filename: "trace.har", url: "https://team.atlassian.net/a/1" }],
 };
 
 const ticket = { provider: "jira" as const, key: issue.key, url: issue.url };
@@ -23,22 +21,6 @@ describe("ticketBranchName", () => {
       "feat/shp-4158-add-a6-labels",
     );
     expect(ticketBranchName({ ...issue, title: "???" })).toBe("fix/shp-4158");
-  });
-});
-
-describe("ticketPrompt", () => {
-  it("leads with the task, then the ticket's text, files, and link", () => {
-    expect(ticketPrompt(issue)).toBe(
-      [
-        `Fix SHP-4158: ${issue.title}`,
-        issue.description,
-        "Attachments:\n- trace.har: https://team.atlassian.net/a/1",
-        `Ticket: ${issue.url}`,
-      ].join("\n\n"),
-    );
-    expect(ticketPrompt({ ...issue, isBug: false, description: "", attachments: [] })).toBe(
-      `Implement SHP-4158: ${issue.title}\n\nTicket: ${issue.url}`,
-    );
   });
 });
 
